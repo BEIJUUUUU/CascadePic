@@ -2,6 +2,7 @@ from pathlib import Path
 
 from PySide6.QtGui import QColor, QImage
 
+from waterfall_viewer.models.media_item import MediaItem
 from waterfall_viewer.ui.main_window import MainWindow
 
 
@@ -49,3 +50,16 @@ def test_thumbnail_slider_updates_waterfall_width(qtbot) -> None:
     window._thumbnail_slider.setValue(320)
 
     assert window.waterfall.thumbnail_width == 320
+
+
+def test_sort_combo_reorders_media_by_modified_time(qtbot) -> None:
+    window = MainWindow()
+    qtbot.addWidget(window)
+    old = MediaItem(Path("old.jpg"), 100, 100, modified_ns=10)
+    new = MediaItem(Path("new.jpg"), 100, 100, modified_ns=30)
+    window._folder_items = [old, new]
+    window._images = [old.path, new.path]
+
+    window._sort_combo.setCurrentIndex(1)
+
+    assert window._images == [new.path, old.path]

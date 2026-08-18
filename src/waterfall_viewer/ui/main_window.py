@@ -5,6 +5,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QThreadPool
 from PySide6.QtGui import QAction, QCloseEvent, QImageReader, QKeySequence
 from PySide6.QtWidgets import (
+    QComboBox,
     QFileDialog,
     QLabel,
     QMainWindow,
@@ -20,6 +21,7 @@ from waterfall_viewer.services.media_catalog import (
     is_supported_media,
     is_supported_video,
 )
+from waterfall_viewer.services.media_sort import SortMode, sort_media_items
 from waterfall_viewer.ui.image_canvas import ImageCanvas
 from waterfall_viewer.ui.video_player import VideoPlayer
 from waterfall_viewer.ui.waterfall_view import WaterfallView
@@ -81,6 +83,16 @@ class MainWindow(QMainWindow):
         waterfall_action.setShortcut(Qt.Key.Key_Escape)
         waterfall_action.triggered.connect(self.show_waterfall)
         toolbar.addAction(waterfall_action)
+
+        toolbar.addSeparator()
+
+        toolbar.addWidget(QLabel("排序"))
+        self._sort_combo = QComboBox()
+        self._sort_combo.addItem("名称（文件夹默认）", SortMode.NAME)
+        self._sort_combo.addItem("修改时间（新→旧）", SortMode.MODIFIED)
+        self._sort_combo.addItem("创建时间（新→旧）", SortMode.CREATED)
+        self._sort_combo.currentIndexChanged.connect(self._apply_current_sort)
+        toolbar.addWidget(self._sort_combo)
 
         toolbar.addSeparator()
 
@@ -187,6 +199,7 @@ class MainWindow(QMainWindow):
         if generation != self._scan_generation:
             return
 
+        items = sort_media_items(items, self._current_sort_mode())
         self._folder_items = items
         self._item_by_path = {item.path: item for item in items}
         self._images = [item.path for item in items]
@@ -236,7 +249,7 @@ class MainWindow(QMainWindow):
         self._current_index = 0
         if not self._load_current():
             return False
-        self._status_label.setText(f"正在扫描同目录图片：{path.parent}")
+        self._status_label.setText(f"正在扫描同目录媒体：{path.parent}")
         self._start_folder_scan(path.parent, selected_path=path)
         return True
 
@@ -287,6 +300,24 @@ class MainWindow(QMainWindow):
             f"{image.width()} × {image.height()}    {path}"
         )
         return True
+
+    def _current_sort_mode(self) -> SortMode:
+        data = self._sort_combo.currentData()
+        return data if isinstance(data, SortMode) else SortMode(data)
+
+    def _apply_current_sort(self, _index: int = -1) -> None:
+        if not self._folder_items:
+            return
+        current_path = (
+            self._images[self._current_index]
+            if 0 <= self._current_index < len(self._images)
+            else None
+        )
+        self._folder_items = sort_media_items(self._folder_items, self._current_sort_mode())
+        self._images = [item.path for item in self._folder_items]
+        if current_path in self._images:
+            self._current_index = self._images.index(current_path)
+        self.waterfall.set_items(self._folder_items)
 
     def show_waterfall(self) -> None:
         if not self._folder_items:

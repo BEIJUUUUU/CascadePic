@@ -20,6 +20,8 @@ class MediaItem:
     file_size: int = 0
     kind: MediaKind = MediaKind.IMAGE
     duration_ms: int = 0
+    created_ns: int = 0
+    modified_ns: int = 0
 
     @property
     def aspect_ratio(self) -> float:

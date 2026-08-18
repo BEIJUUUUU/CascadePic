@@ -98,15 +98,17 @@ def _read_image_item(path: Path) -> MediaItem | None:
     if not size.isValid():
         return None
     try:
-        file_size = path.stat().st_size
+        stat = path.stat()
     except OSError:
         return None
     return MediaItem(
         path=path,
         width=size.width(),
         height=size.height(),
-        file_size=file_size,
+        file_size=stat.st_size,
         kind=MediaKind.IMAGE,
+        created_ns=stat.st_ctime_ns,
+        modified_ns=stat.st_mtime_ns,
     )
 
 
@@ -119,14 +121,16 @@ def _read_video_item(
     if ffprobe is not None and metadata is None:
         return None
     try:
-        file_size = path.stat().st_size
+        stat = path.stat()
     except OSError:
         return None
     return MediaItem(
         path=path,
         width=metadata.width if metadata else 320,
         height=metadata.height if metadata else 180,
-        file_size=file_size,
+        file_size=stat.st_size,
         kind=MediaKind.VIDEO,
         duration_ms=metadata.duration_ms if metadata else 0,
+        created_ns=stat.st_ctime_ns,
+        modified_ns=stat.st_mtime_ns,
     )

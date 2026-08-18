@@ -50,6 +50,8 @@ def test_scan_image_folder_reads_dimensions_and_file_size(tmp_path: Path) -> Non
     assert items[0].path == path
     assert (items[0].width, items[0].height) == (320, 180)
     assert items[0].file_size > 0
+    assert items[0].created_ns > 0
+    assert items[0].modified_ns > 0
 
 
 def test_scan_image_folder_skips_corrupt_image(tmp_path: Path) -> None:
