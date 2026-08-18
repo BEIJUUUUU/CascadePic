@@ -12,7 +12,7 @@
 
 ## 计划技术栈
 
-- Python 3.12（目标版本；当前开发机尚需安装）
+- Python 3.12
 - PySide6 / Qt 6
 - Pillow
 - VLC / python-vlc
@@ -22,7 +22,24 @@
 
 ## 当前状态
 
-项目初始化阶段，暂未开始功能代码开发。
+已完成首个单图片查看技术原型，支持打开图片、同目录前后切换、适应窗口、原始尺寸、滚轮缩放、拖动和全屏。瀑布流、缓存和视频功能仍在后续阶段。
+
+## 本地开发
+
+要求 Python 3.12：
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m waterfall_viewer
+```
+
+运行测试和静态检查：
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe -m ruff check .
+```
 
 ## 文档
 
