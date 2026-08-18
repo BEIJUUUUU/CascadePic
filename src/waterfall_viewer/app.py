@@ -32,6 +32,6 @@ def main() -> int:
 
     window = MainWindow()
     if len(sys.argv) > 1:
-        window.open_path(Path(sys.argv[1]))
+        window.open_input(Path(sys.argv[1]))
     window.show()
     return app.exec()

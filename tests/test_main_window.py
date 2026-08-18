@@ -22,7 +22,21 @@ def test_window_opens_image_and_discovers_siblings(qtbot, tmp_path: Path) -> Non
 
     assert window.open_path(first)
     assert window.canvas.has_image()
-    assert "1 / 2" in window.statusBar().currentMessage() or "a.png" in window.windowTitle()
+    assert "a.png" in window.windowTitle()
+    qtbot.waitUntil(lambda: len(window.waterfall.items) == 2, timeout=3000)
 
     window.show_next()
     assert "b.png" in window.windowTitle()
+
+
+def test_window_scans_folder_in_background(qtbot, tmp_path: Path) -> None:
+    _write_image(tmp_path / "wide.png", "red")
+    _write_image(tmp_path / "tall.png", "blue")
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    window.open_folder(tmp_path)
+    qtbot.waitUntil(lambda: len(window.waterfall.items) == 2, timeout=3000)
+
+    assert len(window.waterfall.items) == 2
+    assert "共 2 张图片" in window._status_label.text()
