@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QImage, QPainter, QPixmap, QWheelEvent
 from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView
 
 
 class ImageCanvas(QGraphicsView):
-    """A graphics view that supports fit, actual size, zoom and drag navigation."""
+    """Image view with wheel navigation and right-button wheel zoom."""
+
+    navigate_requested = Signal(int)
 
     def __init__(self) -> None:
         super().__init__()
@@ -16,6 +18,7 @@ class ImageCanvas(QGraphicsView):
         self.setScene(self._scene)
 
         self._fit_mode = True
+        self.setObjectName("imageCanvas")
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setBackgroundBrush(Qt.GlobalColor.black)
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
@@ -66,7 +69,11 @@ class ImageCanvas(QGraphicsView):
         if not self.has_image():
             super().wheelEvent(event)
             return
-        self.zoom(1.2 if event.angleDelta().y() > 0 else 1 / 1.2)
+        direction = -1 if event.angleDelta().y() > 0 else 1
+        if event.buttons() & Qt.MouseButton.RightButton:
+            self.zoom(1.2 if direction < 0 else 1 / 1.2)
+        else:
+            self.navigate_requested.emit(direction)
         event.accept()
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API name

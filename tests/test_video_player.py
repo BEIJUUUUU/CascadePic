@@ -1,5 +1,9 @@
 from pathlib import Path
 
+from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtGui import QWheelEvent
+from PySide6.QtTest import QSignalSpy
+
 from waterfall_viewer.ui import video_player
 from waterfall_viewer.ui.video_player import VideoPlayer
 from waterfall_viewer.utils.formatting import format_duration
@@ -95,6 +99,39 @@ def test_video_player_opens_and_controls_media(qtbot, tmp_path: Path) -> None:
     player.volume_slider.setValue(35)
     assert instance.player.volume == 35
 
-    player.position_slider.setValue(500)
-    player._finish_seek()
-    assert instance.player.position == 0.5
+    player.resize(800, 500)
+    player.show()
+    qtbot.mouseClick(
+        player.position_slider,
+        Qt.MouseButton.LeftButton,
+        pos=QPoint(round(player.position_slider.width() * 0.75), 5),
+    )
+    assert 0.73 <= instance.player.position <= 0.77
+
+    qtbot.mouseClick(
+        player.volume_slider,
+        Qt.MouseButton.LeftButton,
+        pos=QPoint(round(player.volume_slider.width() * 0.6), 5),
+    )
+    assert 58 <= instance.player.volume <= 62
+
+
+def test_video_wheel_requests_media_navigation(qtbot) -> None:
+    player = VideoPlayer(vlc_instance=FakeVlcInstance())
+    qtbot.addWidget(player)
+    spy = QSignalSpy(player.navigate_requested)
+    event = QWheelEvent(
+        QPointF(100, 100),
+        QPointF(100, 100),
+        QPoint(),
+        QPoint(0, -120),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+
+    player.wheelEvent(event)
+
+    assert spy.count() == 1
+    assert spy.at(0)[0] == 1

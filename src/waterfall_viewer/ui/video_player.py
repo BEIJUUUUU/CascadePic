@@ -9,16 +9,11 @@ try:
 except (ImportError, OSError):
     vlc = None
 
-from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtWidgets import (
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QSlider,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtCore import QEvent, Qt, QTimer, Signal
+from PySide6.QtGui import QWheelEvent
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
+from waterfall_viewer.ui.jump_slider import JumpSlider
 from waterfall_viewer.utils.formatting import format_duration
 
 
@@ -26,6 +21,7 @@ class VideoPlayer(QWidget):
     """Small libVLC-backed video player suitable for the media viewer page."""
 
     playback_error = Signal(str)
+    navigate_requested = Signal(int)
 
     def __init__(self, vlc_instance: Any | None = None) -> None:
         super().__init__()
@@ -33,19 +29,30 @@ class VideoPlayer(QWidget):
         self._player = None
         self._seeking = False
 
+        self.setObjectName("videoPlayer")
         self.video_surface = QWidget()
+        self.video_surface.setObjectName("videoSurface")
         self.video_surface.setAttribute(Qt.WidgetAttribute.WA_NativeWindow, True)
-        self.video_surface.setStyleSheet("background: black;")
-        self.play_button = QPushButton("播放")
-        self.position_slider = QSlider(Qt.Orientation.Horizontal)
+        self.video_surface.installEventFilter(self)
+        self.play_button = QPushButton("▶")
+        self.play_button.setObjectName("playButton")
+        self.play_button.setToolTip("播放 / 暂停")
+        self.position_slider = JumpSlider(Qt.Orientation.Horizontal)
+        self.position_slider.setObjectName("positionSlider")
         self.position_slider.setRange(0, 1000)
         self.time_label = QLabel("0:00 / 0:00")
-        self.volume_slider = QSlider(Qt.Orientation.Horizontal)
+        self.time_label.setObjectName("timeLabel")
+        self.volume_slider = JumpSlider(Qt.Orientation.Horizontal)
+        self.volume_slider.setObjectName("volumeSlider")
         self.volume_slider.setRange(0, 100)
         self.volume_slider.setValue(80)
-        self.volume_slider.setFixedWidth(110)
+        self.volume_slider.setFixedWidth(120)
 
-        controls = QHBoxLayout()
+        controls_widget = QWidget()
+        controls_widget.setObjectName("videoControls")
+        controls = QHBoxLayout(controls_widget)
+        controls.setContentsMargins(16, 10, 16, 10)
+        controls.setSpacing(12)
         controls.addWidget(self.play_button)
         controls.addWidget(self.position_slider, 1)
         controls.addWidget(self.time_label)
@@ -54,8 +61,9 @@ class VideoPlayer(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         layout.addWidget(self.video_surface, 1)
-        layout.addLayout(controls)
+        layout.addWidget(controls_widget)
 
         self._timer = QTimer(self)
         self._timer.setInterval(250)
@@ -63,6 +71,7 @@ class VideoPlayer(QWidget):
         self.play_button.clicked.connect(self.toggle_play)
         self.position_slider.sliderPressed.connect(self._begin_seek)
         self.position_slider.sliderReleased.connect(self._finish_seek)
+        self.position_slider.jumped.connect(self._seek_to_value)
         self.volume_slider.valueChanged.connect(self._set_volume)
         self._initialize_backend()
 
@@ -106,7 +115,7 @@ class VideoPlayer(QWidget):
             return False
         if result == -1:
             return False
-        self.play_button.setText("暂停")
+        self.play_button.setText("Ⅱ")
         self._timer.start()
         return True
 
@@ -115,10 +124,10 @@ class VideoPlayer(QWidget):
             return
         if self._player.is_playing():
             self._player.pause()
-            self.play_button.setText("播放")
+            self.play_button.setText("▶")
         else:
             self._player.play()
-            self.play_button.setText("暂停")
+            self.play_button.setText("Ⅱ")
             self._timer.start()
 
     def stop(self) -> None:
@@ -127,7 +136,7 @@ class VideoPlayer(QWidget):
             self._player.stop()
         self.position_slider.setValue(0)
         self.time_label.setText("0:00 / 0:00")
-        self.play_button.setText("播放")
+        self.play_button.setText("▶")
 
     def _bind_video_surface(self) -> None:
         if self._player is None:
@@ -145,12 +154,29 @@ class VideoPlayer(QWidget):
 
     def _finish_seek(self) -> None:
         self._seeking = False
+        self._seek_to_value(self.position_slider.value())
+
+    def _seek_to_value(self, value: int) -> None:
         if self._player is not None:
-            self._player.set_position(self.position_slider.value() / 1000)
+            self._player.set_position(value / 1000)
 
     def _set_volume(self, value: int) -> None:
         if self._player is not None:
             self._player.audio_set_volume(value)
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt API name
+        if watched is self.video_surface and event.type() is QEvent.Type.Wheel:
+            self._emit_wheel_navigation(event)
+            return True
+        return super().eventFilter(watched, event)
+
+    def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802 - Qt API name
+        self._emit_wheel_navigation(event)
+
+    def _emit_wheel_navigation(self, event: QWheelEvent) -> None:
+        direction = -1 if event.angleDelta().y() > 0 else 1
+        self.navigate_requested.emit(direction)
+        event.accept()
 
     def _update_progress(self) -> None:
         if self._player is None:
@@ -159,13 +185,13 @@ class VideoPlayer(QWidget):
             state = self._player.get_state()
             if state == vlc.State.Error:
                 self._timer.stop()
-                self.play_button.setText("播放")
+                self.play_button.setText("▶")
                 self.time_label.setText("播放失败")
                 self.playback_error.emit("VLC 无法播放当前视频")
                 return
             if state == vlc.State.Ended:
                 self._timer.stop()
-                self.play_button.setText("播放")
+                self.play_button.setText("▶")
                 return
         duration = max(0, self._player.get_length())
         current = max(0, self._player.get_time())
@@ -173,5 +199,5 @@ class VideoPlayer(QWidget):
             self.position_slider.setValue(round(current / duration * 1000))
         self.time_label.setText(f"{format_duration(current)} / {format_duration(duration)}")
         if duration > 0 and current >= duration:
-            self.play_button.setText("播放")
+            self.play_button.setText("▶")
             self._timer.stop()

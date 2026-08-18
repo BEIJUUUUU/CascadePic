@@ -5,7 +5,16 @@ from collections import OrderedDict
 from math import sqrt
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QThreadPool, Signal
-from PySide6.QtGui import QColor, QImage, QMouseEvent, QPainter, QPaintEvent, QPixmap, QResizeEvent
+from PySide6.QtGui import (
+    QColor,
+    QImage,
+    QMouseEvent,
+    QPainter,
+    QPainterPath,
+    QPaintEvent,
+    QPixmap,
+    QResizeEvent,
+)
 from PySide6.QtWidgets import QAbstractScrollArea
 
 from waterfall_viewer.models.media_item import MediaItem
@@ -36,7 +45,7 @@ class WaterfallView(QAbstractScrollArea):
         self._column_bottoms: list[list[float]] = []
         self._column_target = 220
         self._column_width = 220.0
-        self._gap = 10
+        self._gap = 12
         self._content_height = 0
         self._memory_cache_limit = max(1024 * 1024, memory_cache_bytes)
         self._memory_cache_bytes = 0
@@ -170,7 +179,7 @@ class WaterfallView(QAbstractScrollArea):
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802 - Qt API name
         painter = QPainter(self.viewport())
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        painter.fillRect(event.rect(), QColor("#111315"))
+        painter.fillRect(event.rect(), QColor("#0d1117"))
 
         scroll_y = self.verticalScrollBar().value()
         visible = QRectF(0, scroll_y, self.viewport().width(), self.viewport().height())
@@ -197,20 +206,27 @@ class WaterfallView(QAbstractScrollArea):
     def _paint_item(self, painter: QPainter, item: MediaItem, rect: QRectF) -> None:
         cache_key = (str(item.path), self._target_decode_width())
         pixmap = self._thumbnails.get(cache_key)
+        card_path = QPainterPath()
+        card_path.addRoundedRect(rect, 8, 8)
         if pixmap is None:
-            painter.fillRect(rect, QColor("#25292e"))
-            painter.setPen(QColor("#6b7280"))
+            painter.fillPath(card_path, QColor("#1b2430"))
+            painter.setPen(QColor("#7f8b9a"))
             painter.drawText(
                 rect, Qt.AlignmentFlag.AlignCenter, item.path.suffix.upper().lstrip(".")
             )
         else:
             self._thumbnails.move_to_end(cache_key)
+            painter.save()
+            painter.setClipPath(card_path)
             painter.drawPixmap(rect, pixmap, QRectF(pixmap.rect()))
+            painter.restore()
 
         if item.is_video:
             label = format_duration(item.duration_ms) if item.duration_ms else "VIDEO"
-            badge = QRectF(rect.right() - 70, rect.bottom() - 28, 62, 22)
-            painter.fillRect(badge, QColor(0, 0, 0, 180))
+            badge = QRectF(rect.right() - 72, rect.bottom() - 30, 64, 22)
+            badge_path = QPainterPath()
+            badge_path.addRoundedRect(badge, 6, 6)
+            painter.fillPath(badge_path, QColor(8, 12, 18, 210))
             painter.setPen(QColor("#ffffff"))
             painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, label)
 

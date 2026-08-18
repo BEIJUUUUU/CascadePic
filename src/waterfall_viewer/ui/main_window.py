@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThreadPool
-from PySide6.QtGui import QAction, QCloseEvent, QImageReader, QKeySequence
+from PySide6.QtCore import QSize, Qt, QThreadPool
+from PySide6.QtGui import QAction, QCloseEvent, QImageReader, QKeySequence, QResizeEvent
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -12,7 +12,10 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QSlider,
     QStackedWidget,
+    QStyle,
     QToolBar,
+    QToolButton,
+    QWidget,
 )
 
 from waterfall_viewer.models.media_item import MediaItem
@@ -49,8 +52,10 @@ class MainWindow(QMainWindow):
         self.resize(1200, 800)
 
         self.canvas = ImageCanvas()
+        self.canvas.navigate_requested.connect(self._navigate_by_wheel)
         self.video_player = VideoPlayer()
         self.video_player.playback_error.connect(self._video_playback_error)
+        self.video_player.navigate_requested.connect(self._navigate_by_wheel)
         self.waterfall = WaterfallView()
         self.waterfall.activated.connect(self._open_from_waterfall)
         self._pages = QStackedWidget()
@@ -59,30 +64,37 @@ class MainWindow(QMainWindow):
         self._pages.addWidget(self.video_player)
         self.setCentralWidget(self._pages)
 
+        self._viewer_close_button = QToolButton(self._pages)
+        self._viewer_close_button.setObjectName("viewerCloseButton")
+        self._viewer_close_button.setText("×")
+        self._viewer_close_button.setToolTip("返回瀑布流 (Esc)")
+        self._viewer_close_button.setFixedSize(38, 38)
+        self._viewer_close_button.clicked.connect(self.show_waterfall)
+        self._viewer_close_button.hide()
+
         self._status_label = QLabel("打开媒体文件或文件夹开始浏览")
         self.statusBar().addPermanentWidget(self._status_label, 1)
         self._create_toolbar()
 
     def _create_toolbar(self) -> None:
         toolbar = QToolBar("浏览工具", self)
+        toolbar.setObjectName("mainToolbar")
         toolbar.setMovable(False)
-        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        toolbar.setIconSize(QSize(18, 18))
+        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.addToolBar(toolbar)
 
         open_action = QAction("打开媒体", self)
+        open_action.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton))
         open_action.setShortcut(QKeySequence.StandardKey.Open)
         open_action.triggered.connect(self.choose_image)
         toolbar.addAction(open_action)
 
         folder_action = QAction("打开文件夹", self)
+        folder_action.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))
         folder_action.setShortcut("Ctrl+Shift+O")
         folder_action.triggered.connect(self.choose_folder)
         toolbar.addAction(folder_action)
-
-        waterfall_action = QAction("瀑布流", self)
-        waterfall_action.setShortcut(Qt.Key.Key_Escape)
-        waterfall_action.triggered.connect(self.show_waterfall)
-        toolbar.addAction(waterfall_action)
 
         toolbar.addSeparator()
 
@@ -107,6 +119,7 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self._thumbnail_slider)
 
         clear_cache_action = QAction("清缓存", self)
+        clear_cache_action.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon))
         clear_cache_action.triggered.connect(self.clear_thumbnail_cache)
         toolbar.addAction(clear_cache_action)
 
@@ -148,6 +161,11 @@ class MainWindow(QMainWindow):
         fullscreen_action.setShortcut(Qt.Key.Key_F11)
         fullscreen_action.triggered.connect(self.toggle_fullscreen)
         self.addAction(fullscreen_action)
+
+        close_viewer_action = QAction("返回瀑布流", self)
+        close_viewer_action.setShortcut(Qt.Key.Key_Escape)
+        close_viewer_action.triggered.connect(self.show_waterfall)
+        self.addAction(close_viewer_action)
 
     def choose_image(self) -> None:
         filters = (
@@ -219,7 +237,7 @@ class MainWindow(QMainWindow):
 
         self._current_index = -1
         self.video_player.stop()
-        self._pages.setCurrentWidget(self.waterfall)
+        self._set_current_page(self.waterfall)
         self.setWindowTitle(f"{folder_label} — Waterfall Media Viewer")
         self._status_label.setText(f"共 {len(items)} 个媒体文件    {folder_label}")
 
@@ -269,7 +287,7 @@ class MainWindow(QMainWindow):
             if not self.video_player.open(path):
                 self._show_error(f"无法播放视频，请确认 VLC 可用：\n{path}")
                 return False
-            self._pages.setCurrentWidget(self.video_player)
+            self._set_current_page(self.video_player)
             self.setWindowTitle(f"{path.name} — Waterfall Media Viewer")
             item = self._item_by_path.get(path)
             duration = (
@@ -293,7 +311,7 @@ class MainWindow(QMainWindow):
             return False
 
         self.canvas.set_image(image)
-        self._pages.setCurrentWidget(self.canvas)
+        self._set_current_page(self.canvas)
         self.setWindowTitle(f"{path.name} — Waterfall Media Viewer")
         self._status_label.setText(
             f"{self._current_index + 1} / {len(self._images)}    "
@@ -319,11 +337,34 @@ class MainWindow(QMainWindow):
             self._current_index = self._images.index(current_path)
         self.waterfall.set_items(self._folder_items)
 
-    def show_waterfall(self) -> None:
-        if not self._folder_items:
+    def _set_current_page(self, page: QWidget) -> None:
+        self._pages.setCurrentWidget(page)
+        self._viewer_close_button.setVisible(page is not self.waterfall)
+        self._position_viewer_close_button()
+
+    def _position_viewer_close_button(self) -> None:
+        if not hasattr(self, "_viewer_close_button"):
             return
+        margin = 14
+        self._viewer_close_button.move(
+            self._pages.width() - self._viewer_close_button.width() - margin,
+            margin,
+        )
+        self._viewer_close_button.raise_()
+
+    def _navigate_by_wheel(self, direction: int) -> None:
+        if direction < 0:
+            self.show_previous()
+        else:
+            self.show_next()
+
+    def show_waterfall(self) -> None:
         self.video_player.stop()
-        self._pages.setCurrentWidget(self.waterfall)
+        self._set_current_page(self.waterfall)
+        if not self._folder_items:
+            self.setWindowTitle("Waterfall Media Viewer")
+            self._status_label.setText("打开媒体文件或文件夹开始浏览")
+            return
         folder = self._folder_items[0].path.parent
         self.setWindowTitle(f"{folder} — Waterfall Media Viewer")
         self._status_label.setText(f"共 {len(self._folder_items)} 个媒体文件    {folder}")
@@ -352,6 +393,10 @@ class MainWindow(QMainWindow):
             self.showNormal()
         else:
             self.showFullScreen()
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802 - Qt API name
+        super().resizeEvent(event)
+        self._position_viewer_close_button()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt API name
         for worker in self._scan_workers.values():

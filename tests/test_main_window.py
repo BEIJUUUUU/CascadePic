@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from PySide6.QtGui import QColor, QImage
+from PySide6.QtGui import QAction, QColor, QImage
 
 from waterfall_viewer.models.media_item import MediaItem
 from waterfall_viewer.ui.main_window import MainWindow
@@ -63,3 +63,16 @@ def test_sort_combo_reorders_media_by_modified_time(qtbot) -> None:
     window._sort_combo.setCurrentIndex(1)
 
     assert window._images == [new.path, old.path]
+
+
+def test_viewer_close_button_replaces_waterfall_toolbar_action(qtbot) -> None:
+    window = MainWindow()
+    qtbot.addWidget(window)
+    action_texts = [action.text() for action in window.findChildren(QAction)]
+
+    assert "瀑布流" not in action_texts
+    window._set_current_page(window.canvas)
+    assert not window._viewer_close_button.isHidden()
+
+    window.show_waterfall()
+    assert window._viewer_close_button.isHidden()
