@@ -3,7 +3,9 @@ from pathlib import Path
 
 from PySide6.QtGui import QColor, QImage
 
+from waterfall_viewer.models.media_item import MediaKind
 from waterfall_viewer.services.thumbnail_cache import ThumbnailDiskCache
+from waterfall_viewer.workers import thumbnail_worker
 from waterfall_viewer.workers.thumbnail_worker import ThumbnailWorker
 
 
@@ -85,3 +87,26 @@ def test_thumbnail_worker_reports_disk_cache_hit(tmp_path: Path) -> None:
     worker.run()
 
     assert results == [True]
+
+
+def test_thumbnail_worker_extracts_video_cover(monkeypatch, tmp_path: Path) -> None:
+    source = tmp_path / "clip.mp4"
+    source.write_bytes(b"video")
+    cache = ThumbnailDiskCache(tmp_path / "cache")
+    cover = QImage(320, 180, QImage.Format.Format_RGB32)
+    cover.fill(QColor("orange"))
+    monkeypatch.setattr(
+        thumbnail_worker,
+        "extract_video_thumbnail",
+        lambda path, width, **kwargs: cover,
+    )
+    results: list[bool] = []
+    worker = ThumbnailWorker(source, 320, 1, cache, MediaKind.VIDEO)
+    worker.signals.loaded.connect(
+        lambda _generation, _path, _width, _image, hit: results.append(hit)
+    )
+
+    worker.run()
+
+    assert results == [False]
+    assert cache.total_size() > 0

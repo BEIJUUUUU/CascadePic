@@ -2,11 +2,15 @@ from pathlib import Path
 
 from PySide6.QtGui import QColor, QImage
 
+from waterfall_viewer.models.media_item import MediaKind
+from waterfall_viewer.services import media_catalog
 from waterfall_viewer.services.media_catalog import (
     is_supported_image,
     scan_image_folder,
     scan_image_siblings,
+    scan_media_folder,
 )
+from waterfall_viewer.services.video_probe import VideoMetadata
 
 
 def test_supported_image_extensions_are_case_insensitive(tmp_path: Path) -> None:
@@ -61,3 +65,23 @@ def test_scan_image_folder_honors_cancellation(tmp_path: Path) -> None:
     assert image.save(str(path))
 
     assert scan_image_folder(tmp_path, lambda: True) == []
+
+
+def test_scan_media_folder_mixes_images_and_videos(monkeypatch, tmp_path: Path) -> None:
+    image_path = tmp_path / "a.png"
+    image = QImage(320, 180, QImage.Format.Format_RGB32)
+    image.fill(QColor("red"))
+    assert image.save(str(image_path))
+    video_path = tmp_path / "b.mp4"
+    video_path.write_bytes(b"video")
+    monkeypatch.setattr(media_catalog, "find_ffprobe", lambda: "ffprobe")
+    monkeypatch.setattr(
+        media_catalog,
+        "probe_video",
+        lambda path, executable, should_cancel: VideoMetadata(1280, 720, 5_000),
+    )
+
+    items = scan_media_folder(tmp_path)
+
+    assert [item.kind for item in items] == [MediaKind.IMAGE, MediaKind.VIDEO]
+    assert items[1].duration_ms == 5_000

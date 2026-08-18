@@ -39,7 +39,7 @@ def test_window_scans_folder_in_background(qtbot, tmp_path: Path) -> None:
     qtbot.waitUntil(lambda: len(window.waterfall.items) == 2, timeout=3000)
 
     assert len(window.waterfall.items) == 2
-    assert "共 2 张图片" in window._status_label.text()
+    assert "共 2 个媒体文件" in window._status_label.text()
 
 
 def test_thumbnail_slider_updates_waterfall_width(qtbot) -> None:

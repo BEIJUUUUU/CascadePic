@@ -5,7 +5,7 @@ from threading import Event
 
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
-from waterfall_viewer.services.media_catalog import scan_image_folder
+from waterfall_viewer.services.media_catalog import scan_media_folder
 
 
 class FolderScanSignals(QObject):
@@ -30,7 +30,7 @@ class FolderScanWorker(QRunnable):
     @Slot()
     def run(self) -> None:
         try:
-            items = scan_image_folder(self.folder, self._cancelled.is_set)
+            items = scan_media_folder(self.folder, self._cancelled.is_set)
         except OSError as error:
             if self._cancelled.is_set():
                 self.signals.cancelled.emit(self.generation)

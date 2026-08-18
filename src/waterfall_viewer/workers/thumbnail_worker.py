@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from threading import Event
+from threading import BoundedSemaphore, Event
 
 from PySide6.QtCore import QObject, QRunnable, QSize, Signal, Slot
-from PySide6.QtGui import QImageReader
+from PySide6.QtGui import QImage, QImageReader
 
+from waterfall_viewer.models.media_item import MediaKind
 from waterfall_viewer.services.thumbnail_cache import ThumbnailDiskCache
+from waterfall_viewer.services.video_probe import extract_video_thumbnail
+
+_VIDEO_DECODE_LIMIT = BoundedSemaphore(2)
 
 
 class ThumbnailSignals(QObject):
@@ -24,12 +28,14 @@ class ThumbnailWorker(QRunnable):
         target_width: int,
         generation: int,
         disk_cache: ThumbnailDiskCache,
+        kind: MediaKind = MediaKind.IMAGE,
     ) -> None:
         super().__init__()
         self.path = path
         self.target_width = max(64, target_width)
         self.generation = generation
         self.disk_cache = disk_cache
+        self.kind = kind
         self.signals = ThumbnailSignals()
         self._cancelled = Event()
 
@@ -47,6 +53,30 @@ class ThumbnailWorker(QRunnable):
             self.signals.loaded.emit(self.generation, key, self.target_width, cached, True)
             return
 
+        image = self._decode_video() if self.kind is MediaKind.VIDEO else self._decode_image()
+        if self._cancelled.is_set():
+            self.signals.cancelled.emit(self.generation, key, self.target_width)
+            return
+        if image is None or image.isNull():
+            self.signals.failed.emit(self.generation, key, self.target_width)
+            return
+        self.disk_cache.store(self.path, self.target_width, image, self._cancelled.is_set)
+        if self._cancelled.is_set():
+            self.signals.cancelled.emit(self.generation, key, self.target_width)
+            return
+        self.signals.loaded.emit(self.generation, key, self.target_width, image, False)
+
+    def _decode_video(self) -> QImage | None:
+        with _VIDEO_DECODE_LIMIT:
+            if self._cancelled.is_set():
+                return None
+            return extract_video_thumbnail(
+                self.path,
+                self.target_width,
+                should_cancel=self._cancelled.is_set,
+            )
+
+    def _decode_image(self) -> QImage:
         reader = QImageReader(str(self.path))
         reader.setAutoTransform(True)
         size = reader.size()
@@ -59,15 +89,4 @@ class ThumbnailWorker(QRunnable):
                         max(1, round(size.height() * scale)),
                     )
                 )
-        image = reader.read()
-        if self._cancelled.is_set():
-            self.signals.cancelled.emit(self.generation, key, self.target_width)
-            return
-        if image.isNull():
-            self.signals.failed.emit(self.generation, key, self.target_width)
-            return
-        self.disk_cache.store(self.path, self.target_width, image, self._cancelled.is_set)
-        if self._cancelled.is_set():
-            self.signals.cancelled.emit(self.generation, key, self.target_width)
-            return
-        self.signals.loaded.emit(self.generation, key, self.target_width, image, False)
+        return reader.read()

@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QAbstractScrollArea
 
 from waterfall_viewer.models.media_item import MediaItem
 from waterfall_viewer.services.thumbnail_cache import ThumbnailDiskCache
+from waterfall_viewer.utils.formatting import format_duration
 from waterfall_viewer.workers.thumbnail_worker import ThumbnailWorker
 
 ThumbnailKey = tuple[str, int]
@@ -202,10 +203,16 @@ class WaterfallView(QAbstractScrollArea):
             painter.drawText(
                 rect, Qt.AlignmentFlag.AlignCenter, item.path.suffix.upper().lstrip(".")
             )
-            return
+        else:
+            self._thumbnails.move_to_end(cache_key)
+            painter.drawPixmap(rect, pixmap, QRectF(pixmap.rect()))
 
-        self._thumbnails.move_to_end(cache_key)
-        painter.drawPixmap(rect, pixmap, QRectF(pixmap.rect()))
+        if item.is_video:
+            label = format_duration(item.duration_ms) if item.duration_ms else "VIDEO"
+            badge = QRectF(rect.right() - 70, rect.bottom() - 28, 62, 22)
+            painter.fillRect(badge, QColor(0, 0, 0, 180))
+            painter.setPen(QColor("#ffffff"))
+            painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, label)
 
     def _target_decode_width(self) -> int:
         pixel_ratio = max(1.0, self.devicePixelRatioF())
@@ -222,7 +229,13 @@ class WaterfallView(QAbstractScrollArea):
             or worker_key in self._workers
         ):
             return
-        worker = ThumbnailWorker(item.path, target_width, self._generation, self._disk_cache)
+        worker = ThumbnailWorker(
+            item.path,
+            target_width,
+            self._generation,
+            self._disk_cache,
+            item.kind,
+        )
         worker.signals.loaded.connect(self._thumbnail_loaded)
         worker.signals.failed.connect(self._thumbnail_failed)
         worker.signals.cancelled.connect(self._thumbnail_cancelled)

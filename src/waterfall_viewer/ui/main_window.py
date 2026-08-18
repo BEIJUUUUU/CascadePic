@@ -15,9 +15,15 @@ from PySide6.QtWidgets import (
 )
 
 from waterfall_viewer.models.media_item import MediaItem
-from waterfall_viewer.services.media_catalog import is_supported_image
+from waterfall_viewer.services.media_catalog import (
+    is_supported_image,
+    is_supported_media,
+    is_supported_video,
+)
 from waterfall_viewer.ui.image_canvas import ImageCanvas
+from waterfall_viewer.ui.video_player import VideoPlayer
 from waterfall_viewer.ui.waterfall_view import WaterfallView
+from waterfall_viewer.utils.formatting import format_duration
 from waterfall_viewer.workers.folder_scan_worker import FolderScanWorker
 
 
@@ -29,6 +35,7 @@ class MainWindow(QMainWindow):
         self._images: list[Path] = []
         self._current_index = -1
         self._folder_items: list[MediaItem] = []
+        self._item_by_path: dict[Path, MediaItem] = {}
         self._scan_generation = 0
         self._scan_workers: dict[int, FolderScanWorker] = {}
         self._scan_selections: dict[int, Path | None] = {}
@@ -40,14 +47,17 @@ class MainWindow(QMainWindow):
         self.resize(1200, 800)
 
         self.canvas = ImageCanvas()
+        self.video_player = VideoPlayer()
+        self.video_player.playback_error.connect(self._video_playback_error)
         self.waterfall = WaterfallView()
         self.waterfall.activated.connect(self._open_from_waterfall)
         self._pages = QStackedWidget()
         self._pages.addWidget(self.waterfall)
         self._pages.addWidget(self.canvas)
+        self._pages.addWidget(self.video_player)
         self.setCentralWidget(self._pages)
 
-        self._status_label = QLabel("打开图片或文件夹开始浏览")
+        self._status_label = QLabel("打开媒体文件或文件夹开始浏览")
         self.statusBar().addPermanentWidget(self._status_label, 1)
         self._create_toolbar()
 
@@ -57,7 +67,7 @@ class MainWindow(QMainWindow):
         toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         self.addToolBar(toolbar)
 
-        open_action = QAction("打开图片", self)
+        open_action = QAction("打开媒体", self)
         open_action.setShortcut(QKeySequence.StandardKey.Open)
         open_action.triggered.connect(self.choose_image)
         toolbar.addAction(open_action)
@@ -128,13 +138,16 @@ class MainWindow(QMainWindow):
         self.addAction(fullscreen_action)
 
     def choose_image(self) -> None:
-        filters = "图片 (*.jpg *.jpeg *.png *.bmp *.gif *.webp *.tif *.tiff *.ico);;所有文件 (*)"
-        filename, _ = QFileDialog.getOpenFileName(self, "打开图片", "", filters)
+        filters = (
+            "媒体 (*.jpg *.jpeg *.png *.bmp *.gif *.webp *.tif *.tiff *.ico "
+            "*.mp4 *.mkv *.webm *.mov *.avi *.wmv *.m4v);;所有文件 (*)"
+        )
+        filename, _ = QFileDialog.getOpenFileName(self, "打开媒体", "", filters)
         if filename:
             self.open_path(Path(filename))
 
     def choose_folder(self) -> None:
-        folder = QFileDialog.getExistingDirectory(self, "打开图片文件夹")
+        folder = QFileDialog.getExistingDirectory(self, "打开媒体文件夹")
         if folder:
             self.open_folder(Path(folder))
 
@@ -175,6 +188,7 @@ class MainWindow(QMainWindow):
             return
 
         self._folder_items = items
+        self._item_by_path = {item.path: item for item in items}
         self._images = [item.path for item in items]
         self.waterfall.set_items(items)
         folder_label = folder or (items[0].path.parent if items else "当前文件夹")
@@ -182,16 +196,19 @@ class MainWindow(QMainWindow):
         if selected_path is not None and selected_path in self._images:
             self._current_index = self._images.index(selected_path)
             selected_item = items[self._current_index]
+            details = f"{selected_item.width} × {selected_item.height}"
+            if selected_item.is_video and selected_item.duration_ms:
+                details += f"    {format_duration(selected_item.duration_ms)}"
             self._status_label.setText(
-                f"{self._current_index + 1} / {len(items)}    "
-                f"{selected_item.width} × {selected_item.height}    {selected_path}"
+                f"{self._current_index + 1} / {len(items)}    {details}    {selected_path}"
             )
             return
 
         self._current_index = -1
+        self.video_player.stop()
         self._pages.setCurrentWidget(self.waterfall)
         self.setWindowTitle(f"{folder_label} — Waterfall Media Viewer")
-        self._status_label.setText(f"共 {len(items)} 张图片    {folder_label}")
+        self._status_label.setText(f"共 {len(items)} 个媒体文件    {folder_label}")
 
     def _folder_scan_failed(self, generation: int, error: str) -> None:
         self._scan_workers.pop(generation, None)
@@ -209,11 +226,12 @@ class MainWindow(QMainWindow):
 
     def open_path(self, path: Path) -> bool:
         path = path.expanduser().resolve()
-        if not is_supported_image(path):
-            self._show_error(f"不支持或不存在的图片：\n{path}")
+        if not is_supported_media(path):
+            self._show_error(f"不支持或不存在的媒体文件：\n{path}")
             return False
 
         self._folder_items = []
+        self._item_by_path = {}
         self._images = [path]
         self._current_index = 0
         if not self._load_current():
@@ -234,6 +252,26 @@ class MainWindow(QMainWindow):
             return False
 
         path = self._images[self._current_index]
+        if is_supported_video(path):
+            if not self.video_player.open(path):
+                self._show_error(f"无法播放视频，请确认 VLC 可用：\n{path}")
+                return False
+            self._pages.setCurrentWidget(self.video_player)
+            self.setWindowTitle(f"{path.name} — Waterfall Media Viewer")
+            item = self._item_by_path.get(path)
+            duration = (
+                f"    {format_duration(item.duration_ms)}"
+                if item is not None and item.duration_ms
+                else ""
+            )
+            self._status_label.setText(
+                f"{self._current_index + 1} / {len(self._images)}{duration}    {path}"
+            )
+            return True
+
+        if not is_supported_image(path):
+            return False
+        self.video_player.stop()
         reader = QImageReader(str(path))
         reader.setAutoTransform(True)
         image = reader.read()
@@ -253,10 +291,11 @@ class MainWindow(QMainWindow):
     def show_waterfall(self) -> None:
         if not self._folder_items:
             return
+        self.video_player.stop()
         self._pages.setCurrentWidget(self.waterfall)
         folder = self._folder_items[0].path.parent
         self.setWindowTitle(f"{folder} — Waterfall Media Viewer")
-        self._status_label.setText(f"共 {len(self._folder_items)} 张图片    {folder}")
+        self._status_label.setText(f"共 {len(self._folder_items)} 个媒体文件    {folder}")
 
     def show_previous(self) -> None:
         if not self._images:
@@ -269,6 +308,9 @@ class MainWindow(QMainWindow):
             return
         self._current_index = (self._current_index + 1) % len(self._images)
         self._load_current()
+
+    def _video_playback_error(self, message: str) -> None:
+        self._status_label.setText(message)
 
     def clear_thumbnail_cache(self) -> None:
         removed = self.waterfall.clear_thumbnail_cache()
@@ -283,6 +325,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt API name
         for worker in self._scan_workers.values():
             worker.cancel()
+        self.video_player.stop()
         super().closeEvent(event)
 
     def _show_error(self, message: str) -> None:
