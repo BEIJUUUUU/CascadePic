@@ -22,7 +22,7 @@
 
 ## 当前状态
 
-已完成图片查看、图片与视频混合瀑布流、两级缩略图缓存和基础视频播放。视频支持 FFprobe 元数据、FFmpeg 封面提取、时长标记，以及基于 libVLC 的播放、暂停、进度和音量控制。
+已完成图片查看、图片与视频混合瀑布流、两级缩略图缓存、基础视频播放，以及 PyInstaller 一键打包。视频支持 FFprobe 元数据、FFmpeg 封面提取、时长标记，以及基于 libVLC 的播放、暂停、进度和音量控制。打包版会自动捆绑可用的 libVLC 与 FFmpeg/FFprobe。
 
 ## 快速试用
 
@@ -33,6 +33,36 @@
 ```powershell
 .\.venv\Scripts\python.exe -m waterfall_viewer "D:\你的图片文件夹"
 ```
+
+## 打包发布
+
+一键构建可发布目录：
+
+```powershell
+.\build.ps1
+```
+
+如果系统执行策略禁止运行脚本，请使用：
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
+```
+
+构建脚本会：
+
+1. 在虚拟环境中安装 PyInstaller；
+2. 按 `packaging\waterfall_viewer.spec` 生成 `dist\WaterfallMediaViewer\`；
+3. 自动从常见路径寻找并复制 `libvlc.dll`、`libvlccore.dll` 和 VLC `plugins` 目录；
+4. 自动寻找 `ffmpeg.exe` 与 `ffprobe.exe` 并复制到输出目录；
+5. 找不到的可选组件会给出提示（例如缺少 VLC 时视频播放不可用，缺少 FFmpeg 时视频封面不可用）。
+
+也可以通过参数手动指定组件路径：
+
+```powershell
+.\build.ps1 -VlcDir "C:\Program Files\VideoLAN\VLC" -Ffmpeg "E:\tools\ffmpeg.exe" -Ffprobe "E:\tools\ffprobe.exe"
+```
+
+打包后直接运行 `dist\WaterfallMediaViewer\WaterfallMediaViewer.exe` 即可，无需安装 Python。
 
 ## 本地开发
 

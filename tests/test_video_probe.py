@@ -96,3 +96,26 @@ def test_process_runner_terminates_when_cancelled() -> None:
 
     assert result is None
     assert time.perf_counter() - started < 2
+
+
+def test_find_tool_prefers_configured_environment(monkeypatch, tmp_path: Path) -> None:
+    configured = tmp_path / "ffprobe.exe"
+    configured.touch()
+    monkeypatch.setenv("WATERFALL_FFPROBE", str(configured))
+
+    assert video_probe._find_tool("WATERFALL_FFPROBE", "ffprobe.exe") == str(configured)
+
+
+def test_find_tool_uses_frozen_executable_directory(monkeypatch, tmp_path: Path) -> None:
+    bundled = tmp_path / "ffmpeg.exe"
+    bundled.touch()
+    monkeypatch.delenv("WATERFALL_FFMPEG", raising=False)
+    monkeypatch.setattr(video_probe.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(
+        video_probe.sys,
+        "executable",
+        str(tmp_path / "WaterfallMediaViewer.exe"),
+        raising=False,
+    )
+
+    assert video_probe._find_tool("WATERFALL_FFMPEG", "ffmpeg.exe") == str(bundled)

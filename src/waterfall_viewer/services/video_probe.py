@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -144,6 +145,10 @@ def _find_tool(environment_name: str, executable_name: str) -> str | None:
     configured = os.environ.get(environment_name)
     if configured and Path(configured).is_file():
         return configured
+    if getattr(sys, "frozen", False):
+        bundled = Path(sys.executable).parent / executable_name
+        if bundled.is_file():
+            return str(bundled)
     return shutil.which(executable_name)
 
 

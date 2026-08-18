@@ -19,6 +19,7 @@ dev = [
     "pytest>=8.3,<10",
     "pytest-qt>=4.4,<5",
     "ruff>=0.9,<1",
+    "pyinstaller>=6.11,<7",
 ]
 [project.scripts]
 waterfall-viewer = "waterfall_viewer.app:main"
