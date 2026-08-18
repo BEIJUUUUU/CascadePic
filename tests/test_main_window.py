@@ -40,3 +40,12 @@ def test_window_scans_folder_in_background(qtbot, tmp_path: Path) -> None:
 
     assert len(window.waterfall.items) == 2
     assert "共 2 张图片" in window._status_label.text()
+
+
+def test_thumbnail_slider_updates_waterfall_width(qtbot) -> None:
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    window._thumbnail_slider.setValue(320)
+
+    assert window.waterfall.thumbnail_width == 320

@@ -3,6 +3,7 @@ from pathlib import Path
 from PySide6.QtGui import QColor, QImage
 
 from waterfall_viewer.models.media_item import MediaItem
+from waterfall_viewer.services.thumbnail_cache import ThumbnailDiskCache
 from waterfall_viewer.ui.waterfall_view import WaterfallView
 
 
@@ -49,7 +50,7 @@ def test_waterfall_thumbnail_width_is_bounded(qtbot) -> None:
 def test_visible_thumbnail_loads_asynchronously(qtbot, tmp_path: Path) -> None:
     path = tmp_path / "thumbnail.png"
     _write_image(path, 640, 360)
-    view = WaterfallView()
+    view = WaterfallView(disk_cache=ThumbnailDiskCache(tmp_path / "cache"))
     qtbot.addWidget(view)
     view.resize(600, 400)
     view.set_items([MediaItem(path, 640, 360)])
@@ -73,6 +74,23 @@ def test_stale_thumbnail_result_is_ignored(qtbot, tmp_path: Path) -> None:
 
     view.set_items([MediaItem(new_path, 100, 100)])
     stale_image = QImage(100, 100, QImage.Format.Format_RGB32)
-    view._thumbnail_loaded(stale_generation, str(old_path), target_width, stale_image)
+    view._thumbnail_loaded(stale_generation, str(old_path), target_width, stale_image, False)
 
     assert view.thumbnail_count == 0
+
+
+def test_memory_cache_respects_byte_budget(qtbot, tmp_path: Path) -> None:
+    path = tmp_path / "large.png"
+    _write_image(path, 100, 100)
+    view = WaterfallView(
+        disk_cache=ThumbnailDiskCache(tmp_path / "cache"),
+        memory_cache_bytes=1024 * 1024,
+    )
+    qtbot.addWidget(view)
+    view.set_items([MediaItem(path, 100, 100)])
+    image = QImage(2000, 2000, QImage.Format.Format_RGB32)
+
+    view._thumbnail_loaded(view._generation, str(path), view._target_decode_width(), image, False)
+
+    assert view.memory_cache_bytes <= 1024 * 1024
+    assert view.thumbnail_count == 1

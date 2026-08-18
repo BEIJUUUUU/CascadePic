@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QMessageBox,
+    QSlider,
     QStackedWidget,
     QToolBar,
 )
@@ -70,6 +71,22 @@ class MainWindow(QMainWindow):
         waterfall_action.setShortcut(Qt.Key.Key_Escape)
         waterfall_action.triggered.connect(self.show_waterfall)
         toolbar.addAction(waterfall_action)
+
+        toolbar.addSeparator()
+
+        toolbar.addWidget(QLabel("缩略图"))
+        self._thumbnail_slider = QSlider(Qt.Orientation.Horizontal)
+        self._thumbnail_slider.setRange(120, 480)
+        self._thumbnail_slider.setSingleStep(20)
+        self._thumbnail_slider.setPageStep(40)
+        self._thumbnail_slider.setValue(220)
+        self._thumbnail_slider.setFixedWidth(130)
+        self._thumbnail_slider.valueChanged.connect(self.waterfall.set_thumbnail_width)
+        toolbar.addWidget(self._thumbnail_slider)
+
+        clear_cache_action = QAction("清缓存", self)
+        clear_cache_action.triggered.connect(self.clear_thumbnail_cache)
+        toolbar.addAction(clear_cache_action)
 
         toolbar.addSeparator()
 
@@ -252,6 +269,10 @@ class MainWindow(QMainWindow):
             return
         self._current_index = (self._current_index + 1) % len(self._images)
         self._load_current()
+
+    def clear_thumbnail_cache(self) -> None:
+        removed = self.waterfall.clear_thumbnail_cache()
+        self._status_label.setText(f"已清理 {removed} 个磁盘缩略图缓存文件")
 
     def toggle_fullscreen(self) -> None:
         if self.isFullScreen():

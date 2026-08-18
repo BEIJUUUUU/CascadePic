@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from bisect import bisect_left
 from collections import OrderedDict
+from math import sqrt
 
 from PySide6.QtCore import QPointF, QRectF, Qt, QThreadPool, Signal
 from PySide6.QtGui import QColor, QImage, QMouseEvent, QPainter, QPaintEvent, QPixmap, QResizeEvent
 from PySide6.QtWidgets import QAbstractScrollArea
 
 from waterfall_viewer.models.media_item import MediaItem
+from waterfall_viewer.services.thumbnail_cache import ThumbnailDiskCache
 from waterfall_viewer.workers.thumbnail_worker import ThumbnailWorker
 
 ThumbnailKey = tuple[str, int]
@@ -20,7 +22,11 @@ class WaterfallView(QAbstractScrollArea):
     activated = Signal(object)
     _MAX_PENDING_THUMBNAILS = 64
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        disk_cache: ThumbnailDiskCache | None = None,
+        memory_cache_bytes: int = 256 * 1024 * 1024,
+    ) -> None:
         super().__init__()
         self._items: list[MediaItem] = []
         self._item_keys: set[str] = set()
@@ -31,9 +37,13 @@ class WaterfallView(QAbstractScrollArea):
         self._column_width = 220.0
         self._gap = 10
         self._content_height = 0
-        self._cache_limit = 256
+        self._memory_cache_limit = max(1024 * 1024, memory_cache_bytes)
+        self._memory_cache_bytes = 0
         self._generation = 0
+        self._disk_cache = disk_cache or ThumbnailDiskCache()
+        self._disk_cache_hits = 0
         self._thumbnails: OrderedDict[ThumbnailKey, QPixmap] = OrderedDict()
+        self._thumbnail_sizes: dict[ThumbnailKey, int] = {}
         self._failed: set[ThumbnailKey] = set()
         self._workers: dict[WorkerKey, ThumbnailWorker] = {}
         self._thread_pool = QThreadPool(self)
@@ -54,12 +64,33 @@ class WaterfallView(QAbstractScrollArea):
         return self._content_height
 
     @property
+    def thumbnail_width(self) -> int:
+        return self._column_target
+
+    @property
     def thumbnail_count(self) -> int:
         return len(self._thumbnails)
 
     @property
     def pending_thumbnail_count(self) -> int:
         return len(self._workers)
+
+    @property
+    def memory_cache_bytes(self) -> int:
+        return self._memory_cache_bytes
+
+    @property
+    def disk_cache_hits(self) -> int:
+        return self._disk_cache_hits
+
+    def disk_cache_size(self) -> int:
+        return self._disk_cache.total_size()
+
+    def clear_thumbnail_cache(self) -> int:
+        self._reset_thumbnail_requests()
+        removed = self._disk_cache.clear()
+        self.viewport().update()
+        return removed
 
     def set_items(self, items: list[MediaItem]) -> None:
         self._reset_thumbnail_requests()
@@ -87,9 +118,12 @@ class WaterfallView(QAbstractScrollArea):
     def _reset_thumbnail_requests(self) -> None:
         self._generation += 1
         for worker_key, worker in list(self._workers.items()):
+            worker.cancel()
             if self._thread_pool.tryTake(worker):
                 self._workers.pop(worker_key, None)
         self._thumbnails.clear()
+        self._thumbnail_sizes.clear()
+        self._memory_cache_bytes = 0
         self._failed.clear()
 
     def _relayout(self) -> None:
@@ -188,9 +222,10 @@ class WaterfallView(QAbstractScrollArea):
             or worker_key in self._workers
         ):
             return
-        worker = ThumbnailWorker(item.path, target_width, self._generation)
+        worker = ThumbnailWorker(item.path, target_width, self._generation, self._disk_cache)
         worker.signals.loaded.connect(self._thumbnail_loaded)
         worker.signals.failed.connect(self._thumbnail_failed)
+        worker.signals.cancelled.connect(self._thumbnail_cancelled)
         self._workers[worker_key] = worker
         self._thread_pool.start(worker)
 
@@ -199,21 +234,44 @@ class WaterfallView(QAbstractScrollArea):
             generation, path_key, _ = worker_key
             if generation == self._generation and path_key in desired_paths:
                 continue
+            worker.cancel()
             if self._thread_pool.tryTake(worker):
                 self._workers.pop(worker_key, None)
 
     def _thumbnail_loaded(
-        self, generation: int, path_key: str, target_width: int, image: QImage
+        self,
+        generation: int,
+        path_key: str,
+        target_width: int,
+        image: QImage,
+        disk_cache_hit: bool,
     ) -> None:
         worker_key = (generation, path_key, target_width)
         self._workers.pop(worker_key, None)
         if generation != self._generation or path_key not in self._item_keys:
             return
         cache_key = (path_key, target_width)
-        self._thumbnails[cache_key] = QPixmap.fromImage(image)
+        pixmap = QPixmap.fromImage(image)
+        pixmap_bytes = max(1, pixmap.width() * pixmap.height() * 4)
+        if pixmap_bytes > self._memory_cache_limit:
+            scale = sqrt(self._memory_cache_limit / pixmap_bytes)
+            pixmap = pixmap.scaled(
+                max(1, round(pixmap.width() * scale)),
+                max(1, round(pixmap.height() * scale)),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            pixmap_bytes = max(1, pixmap.width() * pixmap.height() * 4)
+        previous_size = self._thumbnail_sizes.get(cache_key, 0)
+        self._thumbnails[cache_key] = pixmap
+        self._thumbnail_sizes[cache_key] = pixmap_bytes
+        self._memory_cache_bytes += pixmap_bytes - previous_size
         self._thumbnails.move_to_end(cache_key)
-        while len(self._thumbnails) > self._cache_limit:
-            self._thumbnails.popitem(last=False)
+        if disk_cache_hit:
+            self._disk_cache_hits += 1
+        while self._memory_cache_bytes > self._memory_cache_limit and self._thumbnails:
+            evicted_key, _ = self._thumbnails.popitem(last=False)
+            self._memory_cache_bytes -= self._thumbnail_sizes.pop(evicted_key, 0)
         self.viewport().update()
 
     def _thumbnail_failed(self, generation: int, path_key: str, target_width: int) -> None:
@@ -223,6 +281,9 @@ class WaterfallView(QAbstractScrollArea):
             return
         self._failed.add((path_key, target_width))
         self.viewport().update()
+
+    def _thumbnail_cancelled(self, generation: int, path_key: str, target_width: int) -> None:
+        self._workers.pop((generation, path_key, target_width), None)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt API name
         content_point = event.position() + QPointF(0, self.verticalScrollBar().value())
