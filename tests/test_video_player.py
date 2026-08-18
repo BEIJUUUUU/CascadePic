@@ -115,6 +115,10 @@ def test_video_player_opens_and_controls_media(qtbot, tmp_path: Path) -> None:
     )
     assert 58 <= instance.player.volume <= 62
 
+    player.stop()
+    assert player.position_slider.value() == 0
+    qtbot.waitUntil(lambda: not instance.player.playing, timeout=2000)
+
 
 def test_video_wheel_requests_media_navigation(qtbot) -> None:
     player = VideoPlayer(vlc_instance=FakeVlcInstance())

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QThreadPool
-from PySide6.QtGui import QAction, QCloseEvent, QImageReader, QKeySequence, QResizeEvent
+from PySide6.QtGui import QAction, QCloseEvent, QImage, QKeySequence, QResizeEvent
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -30,6 +30,7 @@ from waterfall_viewer.ui.video_player import VideoPlayer
 from waterfall_viewer.ui.waterfall_view import WaterfallView
 from waterfall_viewer.utils.formatting import format_duration
 from waterfall_viewer.workers.folder_scan_worker import FolderScanWorker
+from waterfall_viewer.workers.image_loader import ImageLoadWorker
 
 
 class MainWindow(QMainWindow):
@@ -47,6 +48,10 @@ class MainWindow(QMainWindow):
         self._scan_folders: dict[int, Path] = {}
         self._thread_pool = QThreadPool(self)
         self._thread_pool.setMaxThreadCount(2)
+        self._image_pool = QThreadPool(self)
+        self._image_pool.setMaxThreadCount(1)
+        self._image_load_generation = 0
+        self._pending_image_path: Path | None = None
 
         self.setWindowTitle("Waterfall Media Viewer")
         self.resize(1200, 800)
@@ -265,11 +270,9 @@ class MainWindow(QMainWindow):
         self._item_by_path = {}
         self._images = [path]
         self._current_index = 0
-        if not self._load_current():
-            return False
         self._status_label.setText(f"正在扫描同目录媒体：{path.parent}")
         self._start_folder_scan(path.parent, selected_path=path)
-        return True
+        return self._load_current()
 
     def _open_from_waterfall(self, path: Path) -> None:
         try:
@@ -303,21 +306,35 @@ class MainWindow(QMainWindow):
         if not is_supported_image(path):
             return False
         self.video_player.stop()
-        reader = QImageReader(str(path))
-        reader.setAutoTransform(True)
-        image = reader.read()
-        if image.isNull():
-            self._show_error(f"无法读取图片：\n{path}\n\n{reader.errorString()}")
-            return False
-
-        self.canvas.set_image(image)
+        self._start_image_load(path)
         self._set_current_page(self.canvas)
         self.setWindowTitle(f"{path.name} — Waterfall Media Viewer")
+        self._status_label.setText(f"正在加载图片：{path.name}")
+        return True
+
+    def _start_image_load(self, path: Path) -> None:
+        self._image_load_generation += 1
+        self._pending_image_path = path
+        worker = ImageLoadWorker(path)
+        worker.signals.loaded.connect(self._image_loaded)
+        worker.signals.failed.connect(self._image_load_failed)
+        self._image_pool.start(worker)
+
+    def _image_loaded(self, path_str: str, image: QImage) -> None:
+        if path_str != str(self._pending_image_path):
+            return
+        self._pending_image_path = None
+        self.canvas.set_image(image)
         self._status_label.setText(
             f"{self._current_index + 1} / {len(self._images)}    "
-            f"{image.width()} × {image.height()}    {path}"
+            f"{image.width()} × {image.height()}    {self._images[self._current_index]}"
         )
-        return True
+
+    def _image_load_failed(self, path_str: str, error: str) -> None:
+        if path_str != str(self._pending_image_path):
+            return
+        self._pending_image_path = None
+        self._show_error(f"无法读取图片：\n{path_str}\n\n{error}")
 
     def _current_sort_mode(self) -> SortMode:
         data = self._sort_combo.currentData()
@@ -401,6 +418,8 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt API name
         for worker in self._scan_workers.values():
             worker.cancel()
+        self._image_load_generation += 1
+        self._pending_image_path = None
         self.video_player.stop()
         super().closeEvent(event)
 
