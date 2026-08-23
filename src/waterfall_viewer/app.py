@@ -21,22 +21,22 @@ def _configure_frozen_runtime() -> None:
         os.environ.setdefault("PYTHON_VLC_MODULE_PATH", str(base / "plugins"))
 
 
-def _apply_dark_palette(app: QApplication) -> None:
+def _apply_palette(app: QApplication) -> None:
     palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor("#0d1117"))
-    palette.setColor(QPalette.ColorRole.WindowText, QColor("#f3f6fb"))
-    palette.setColor(QPalette.ColorRole.Base, QColor("#111821"))
-    palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#1b2430"))
-    palette.setColor(QPalette.ColorRole.Text, QColor("#f3f6fb"))
-    palette.setColor(QPalette.ColorRole.Button, QColor("#222b36"))
-    palette.setColor(QPalette.ColorRole.ButtonText, QColor("#f3f6fb"))
-    palette.setColor(QPalette.ColorRole.Highlight, QColor("#60a5fa"))
+    palette.setColor(QPalette.ColorRole.Window, QColor("#faf9f8"))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor("#1b1a19"))
+    palette.setColor(QPalette.ColorRole.Base, QColor("#ffffff"))
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#f3f2f1"))
+    palette.setColor(QPalette.ColorRole.Text, QColor("#1b1a19"))
+    palette.setColor(QPalette.ColorRole.Button, QColor("#ffffff"))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor("#1b1a19"))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor("#0078d4"))
     palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
     app.setPalette(palette)
 
 
 def _apply_stylesheet(app: QApplication) -> None:
-    stylesheet = Path(__file__).parent / "resources" / "styles" / "fluent_dark.qss"
+    stylesheet = Path(__file__).parent / "resources" / "styles" / "fluent_light.qss"
     with suppress(OSError):
         app.setStyleSheet(stylesheet.read_text(encoding="utf-8"))
 
@@ -82,7 +82,7 @@ def main() -> int:
     app.setApplicationName("Waterfall Media Viewer")
     app.setOrganizationName("Waterfall Media Viewer")
     app.setStyle("Fusion")
-    _apply_dark_palette(app)
+    _apply_palette(app)
     _apply_stylesheet(app)
 
     smoke_path, media_args = _parse_args(sys.argv[1:])

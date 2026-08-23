@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QImage, QPainter, QPixmap, QWheelEvent
+from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPixmap, QWheelEvent
 from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsScene, QGraphicsView
 
 
@@ -20,7 +20,7 @@ class ImageCanvas(QGraphicsView):
         self._fit_mode = True
         self.setObjectName("imageCanvas")
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setBackgroundBrush(Qt.GlobalColor.black)
+        self.setBackgroundBrush(QBrush(QColor("#16191d")))
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)

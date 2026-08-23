@@ -54,9 +54,12 @@ class VideoPlayer(QWidget):
         self._pool = QThreadPool(self)
 
         self.setObjectName("videoPlayer")
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.installEventFilter(self)
         self.video_surface = QWidget()
         self.video_surface.setObjectName("videoSurface")
         self.video_surface.setAttribute(Qt.WidgetAttribute.WA_NativeWindow, True)
+        self.video_surface.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.video_surface.installEventFilter(self)
         self.play_button = QPushButton("▶")
         self.play_button.setObjectName("playButton")
@@ -208,7 +211,10 @@ class VideoPlayer(QWidget):
             self._player.audio_set_volume(value)
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt API name
-        if watched is self.video_surface and event.type() is QEvent.Type.Wheel:
+        if event.type() is QEvent.Type.Wheel and watched in (
+            self,
+            self.video_surface,
+        ):
             self._emit_wheel_navigation(event)
             return True
         return super().eventFilter(watched, event)

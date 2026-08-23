@@ -179,7 +179,7 @@ class WaterfallView(QAbstractScrollArea):
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802 - Qt API name
         painter = QPainter(self.viewport())
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        painter.fillRect(event.rect(), QColor("#0d1117"))
+        painter.fillRect(event.rect(), QColor("#faf9f8"))
 
         scroll_y = self.verticalScrollBar().value()
         visible = QRectF(0, scroll_y, self.viewport().width(), self.viewport().height())
@@ -209,8 +209,8 @@ class WaterfallView(QAbstractScrollArea):
         card_path = QPainterPath()
         card_path.addRoundedRect(rect, 8, 8)
         if pixmap is None:
-            painter.fillPath(card_path, QColor("#1b2430"))
-            painter.setPen(QColor("#7f8b9a"))
+            painter.fillPath(card_path, QColor("#f0efed"))
+            painter.setPen(QColor("#8a8886"))
             painter.drawText(
                 rect, Qt.AlignmentFlag.AlignCenter, item.path.suffix.upper().lstrip(".")
             )
@@ -226,7 +226,7 @@ class WaterfallView(QAbstractScrollArea):
             badge = QRectF(rect.right() - 72, rect.bottom() - 30, 64, 22)
             badge_path = QPainterPath()
             badge_path.addRoundedRect(badge, 6, 6)
-            painter.fillPath(badge_path, QColor(8, 12, 18, 210))
+            painter.fillPath(badge_path, QColor(0, 0, 0, 170))
             painter.setPen(QColor("#ffffff"))
             painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, label)
 
