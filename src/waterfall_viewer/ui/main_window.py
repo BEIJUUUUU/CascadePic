@@ -4,7 +4,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QThreadPool
-from PySide6.QtGui import QAction, QCloseEvent, QIcon, QImage, QKeySequence, QResizeEvent
+from PySide6.QtGui import QAction, QCloseEvent, QIcon, QImage, QKeySequence, QMovie, QResizeEvent
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -57,6 +57,9 @@ class MainWindow(QMainWindow):
         self._image_cache: OrderedDict[str, QImage] = OrderedDict()
         self._image_cache_bytes = 0
         self._image_cache_limit = 512 * 1024 * 1024
+        self._movie: QMovie | None = None
+        self._movie_path: Path | None = None
+        self._movie_first_frame = True
 
         self.setWindowTitle("Waterfall Media Viewer")
         self.resize(1200, 800)
@@ -222,7 +225,7 @@ class MainWindow(QMainWindow):
 
     def choose_image(self) -> None:
         filters = (
-            "媒体 (*.jpg *.jpeg *.png *.bmp *.gif *.webp *.tif *.tiff *.ico "
+            "媒体 (*.jpg *.jpeg *.jfif *.png *.bmp *.gif *.webp *.tif *.tiff *.ico "
             "*.mp4 *.mkv *.webm *.mov *.avi *.wmv *.m4v);;所有文件 (*)"
         )
         filename, _ = QFileDialog.getOpenFileName(self, "打开媒体", "", filters)
@@ -337,6 +340,7 @@ class MainWindow(QMainWindow):
 
         path = self._images[self._current_index]
         if is_supported_video(path):
+            self._stop_movie()
             if not self.video_player.open(path):
                 self._show_error(f"无法播放视频，请确认 VLC 可用：\n{path}")
                 return False
@@ -358,19 +362,72 @@ class MainWindow(QMainWindow):
         self.video_player.stop()
         self._set_current_page(self.canvas)
         self.setWindowTitle(f"{path.name} — Waterfall Media Viewer")
+        if path.suffix.casefold() == ".gif":
+            self._status_label.setText(f"正在加载动图：{path.name}")
+            return self._start_movie(path)
         self._status_label.setText(f"正在加载图片：{path.name}")
         self._start_image_load(path)
         return True
 
-    def _start_image_load(self, path: Path) -> None:
+    def _cancel_image_loads(self) -> None:
         self._image_load_generation += 1
-        generation = self._image_load_generation
-        self._pending_image_path = path
-
+        self._pending_image_path = None
         for old_generation, old_worker in list(self._image_workers.items()):
             old_worker.cancel()
             if self._image_pool.tryTake(old_worker):
                 self._image_workers.pop(old_generation, None)
+
+    def _start_movie(self, path: Path) -> bool:
+        self._cancel_image_loads()
+        self._stop_movie()
+        movie = QMovie(str(path))
+        if not movie.isValid():
+            self._show_error(f"无法读取 GIF 动图：\n{path}")
+            return False
+        movie.setCacheMode(QMovie.CacheMode.CacheAll)
+        movie.frameChanged.connect(lambda frame: self._movie_frame_changed(movie, frame))
+        movie.error.connect(lambda error: self._movie_error(movie, error))
+        self._movie = movie
+        self._movie_path = path
+        self._movie_first_frame = True
+        movie.start()
+        return True
+
+    def _movie_frame_changed(self, movie: QMovie, frame: int) -> None:
+        if movie is not self._movie or self._movie_path is None:
+            return
+        image = movie.currentImage()
+        if image.isNull():
+            return
+        if self._movie_first_frame or not self.canvas.has_image():
+            self.canvas.set_image(image)
+            self._movie_first_frame = False
+        else:
+            self.canvas.update_frame(image)
+        frame_count = movie.frameCount()
+        frame_text = f"{frame + 1}/{frame_count}" if frame_count > 0 else str(frame + 1)
+        self._status_label.setText(
+            f"{self._current_index + 1} / {len(self._images)}    GIF 帧 {frame_text}    "
+            f"{image.width()} × {image.height()}    {self._movie_path}"
+        )
+
+    def _movie_error(self, movie: QMovie, _error) -> None:
+        if movie is self._movie and self._movie_path is not None:
+            self._status_label.setText(f"GIF 播放失败：{self._movie_path}")
+
+    def _stop_movie(self) -> None:
+        movie = self._movie
+        self._movie = None
+        self._movie_path = None
+        if movie is not None:
+            movie.stop()
+            movie.deleteLater()
+
+    def _start_image_load(self, path: Path) -> None:
+        self._stop_movie()
+        self._cancel_image_loads()
+        generation = self._image_load_generation
+        self._pending_image_path = path
 
         key = str(path)
         cached = self._image_cache.get(key)
@@ -479,6 +536,7 @@ class MainWindow(QMainWindow):
 
     def show_waterfall(self) -> None:
         self.video_player.stop()
+        self._stop_movie()
         self._set_current_page(self.waterfall)
         if not self._folder_items:
             self.setWindowTitle("Waterfall Media Viewer")
@@ -522,10 +580,8 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt API name
         for worker in self._scan_workers.values():
             worker.cancel()
-        self._image_load_generation += 1
-        self._pending_image_path = None
-        for worker in self._image_workers.values():
-            worker.cancel()
+        self._cancel_image_loads()
+        self._stop_movie()
         self.video_player.stop()
         super().closeEvent(event)
 

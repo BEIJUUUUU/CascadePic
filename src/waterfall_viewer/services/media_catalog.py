@@ -14,6 +14,7 @@ IMAGE_EXTENSIONS = frozenset(
         ".gif",
         ".ico",
         ".jpeg",
+        ".jfif",
         ".jpg",
         ".png",
         ".tif",

@@ -39,6 +39,15 @@ class ImageCanvas(QGraphicsView):
         self._scene.setSceneRect(self._pixmap_item.boundingRect())
         self.fit_to_window()
 
+    def update_frame(self, image: QImage) -> None:
+        """Replace an animation frame without resetting zoom or pan."""
+        previous_size = self._pixmap_item.pixmap().size()
+        pixmap = QPixmap.fromImage(image)
+        self._pixmap_item.setPixmap(pixmap)
+        self._scene.setSceneRect(self._pixmap_item.boundingRect())
+        if previous_size != pixmap.size() and self._fit_mode:
+            self.fit_to_window()
+
     def clear_image(self) -> None:
         self._pixmap_item.setPixmap(QPixmap())
         self._scene.setSceneRect(0, 0, 0, 0)
