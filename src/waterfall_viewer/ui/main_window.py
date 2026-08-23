@@ -1,18 +1,19 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QThreadPool
-from PySide6.QtGui import QAction, QCloseEvent, QImage, QKeySequence, QResizeEvent
+from PySide6.QtGui import QAction, QCloseEvent, QIcon, QImage, QKeySequence, QResizeEvent
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
     QLabel,
     QMainWindow,
     QMessageBox,
+    QSizePolicy,
     QSlider,
     QStackedWidget,
-    QStyle,
     QToolBar,
     QToolButton,
     QWidget,
@@ -49,9 +50,13 @@ class MainWindow(QMainWindow):
         self._thread_pool = QThreadPool(self)
         self._thread_pool.setMaxThreadCount(2)
         self._image_pool = QThreadPool(self)
-        self._image_pool.setMaxThreadCount(1)
+        self._image_pool.setMaxThreadCount(2)
         self._image_load_generation = 0
         self._pending_image_path: Path | None = None
+        self._image_workers: dict[int, ImageLoadWorker] = {}
+        self._image_cache: OrderedDict[str, QImage] = OrderedDict()
+        self._image_cache_bytes = 0
+        self._image_cache_limit = 512 * 1024 * 1024
 
         self.setWindowTitle("Waterfall Media Viewer")
         self.resize(1200, 800)
@@ -81,29 +86,37 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self._status_label, 1)
         self._create_toolbar()
 
+    def _icon(self, name: str) -> QIcon:
+        path = Path(__file__).parent.parent / "resources" / "icons" / f"{name}.svg"
+        return QIcon(str(path))
+
     def _create_toolbar(self) -> None:
         toolbar = QToolBar("浏览工具", self)
         toolbar.setObjectName("mainToolbar")
         toolbar.setMovable(False)
-        toolbar.setIconSize(QSize(18, 18))
-        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        toolbar.setIconSize(QSize(21, 21))
+        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.addToolBar(toolbar)
 
         open_action = QAction("打开媒体", self)
-        open_action.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton))
+        open_action.setIcon(self._icon("image_open"))
+        open_action.setToolTip("打开媒体  Ctrl+O")
         open_action.setShortcut(QKeySequence.StandardKey.Open)
         open_action.triggered.connect(self.choose_image)
         toolbar.addAction(open_action)
 
         folder_action = QAction("打开文件夹", self)
-        folder_action.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon))
+        folder_action.setIcon(self._icon("folder_open"))
+        folder_action.setToolTip("打开文件夹  Ctrl+Shift+O")
         folder_action.setShortcut("Ctrl+Shift+O")
         folder_action.triggered.connect(self.choose_folder)
         toolbar.addAction(folder_action)
 
         toolbar.addSeparator()
 
-        toolbar.addWidget(QLabel("排序"))
+        sort_label = QLabel("排序")
+        sort_label.setObjectName("toolbarLabel")
+        toolbar.addWidget(sort_label)
         self._sort_combo = QComboBox()
         self._sort_combo.addItem("名称（文件夹默认）", SortMode.NAME)
         self._sort_combo.addItem("修改时间（新→旧）", SortMode.MODIFIED)
@@ -113,7 +126,9 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
 
-        toolbar.addWidget(QLabel("缩略图"))
+        thumbnail_label = QLabel("缩略图")
+        thumbnail_label.setObjectName("toolbarLabel")
+        toolbar.addWidget(thumbnail_label)
         self._thumbnail_slider = QSlider(Qt.Orientation.Horizontal)
         self._thumbnail_slider.setRange(120, 480)
         self._thumbnail_slider.setSingleStep(20)
@@ -124,18 +139,25 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self._thumbnail_slider)
 
         clear_cache_action = QAction("清缓存", self)
-        clear_cache_action.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TrashIcon))
+        clear_cache_action.setIcon(self._icon("delete"))
+        clear_cache_action.setToolTip("清理缩略图缓存")
         clear_cache_action.triggered.connect(self.clear_thumbnail_cache)
         toolbar.addAction(clear_cache_action)
 
-        toolbar.addSeparator()
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        toolbar.addWidget(spacer)
 
         previous_action = QAction("上一张", self)
+        previous_action.setIcon(self._icon("previous"))
+        previous_action.setToolTip("上一张  ← / 滚轮向上")
         previous_action.setShortcut(Qt.Key.Key_Left)
         previous_action.triggered.connect(self.show_previous)
         toolbar.addAction(previous_action)
 
         next_action = QAction("下一张", self)
+        next_action.setIcon(self._icon("next"))
+        next_action.setToolTip("下一张  → / 滚轮向下")
         next_action.setShortcut(Qt.Key.Key_Right)
         next_action.triggered.connect(self.show_next)
         toolbar.addAction(next_action)
@@ -143,21 +165,29 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
 
         fit_action = QAction("适应窗口", self)
+        fit_action.setIcon(self._icon("fit"))
+        fit_action.setToolTip("适应窗口  F")
         fit_action.setShortcut("F")
         fit_action.triggered.connect(self.canvas.fit_to_window)
         toolbar.addAction(fit_action)
 
         actual_action = QAction("原始大小", self)
+        actual_action.setIcon(self._icon("actual"))
+        actual_action.setToolTip("原始大小  1")
         actual_action.setShortcut("1")
         actual_action.triggered.connect(self.canvas.actual_size)
         toolbar.addAction(actual_action)
 
         zoom_in_action = QAction("放大", self)
+        zoom_in_action.setIcon(self._icon("zoom_in"))
+        zoom_in_action.setToolTip("放大  Ctrl++ / 右键+滚轮")
         zoom_in_action.setShortcut(QKeySequence.StandardKey.ZoomIn)
         zoom_in_action.triggered.connect(lambda: self.canvas.zoom(1.2))
         toolbar.addAction(zoom_in_action)
 
         zoom_out_action = QAction("缩小", self)
+        zoom_out_action.setIcon(self._icon("zoom_out"))
+        zoom_out_action.setToolTip("缩小  Ctrl+- / 右键+滚轮")
         zoom_out_action.setShortcut(QKeySequence.StandardKey.ZoomOut)
         zoom_out_action.triggered.connect(lambda: self.canvas.zoom(1 / 1.2))
         toolbar.addAction(zoom_out_action)
@@ -306,35 +336,70 @@ class MainWindow(QMainWindow):
         if not is_supported_image(path):
             return False
         self.video_player.stop()
-        self._start_image_load(path)
         self._set_current_page(self.canvas)
         self.setWindowTitle(f"{path.name} — Waterfall Media Viewer")
         self._status_label.setText(f"正在加载图片：{path.name}")
+        self._start_image_load(path)
         return True
 
     def _start_image_load(self, path: Path) -> None:
         self._image_load_generation += 1
+        generation = self._image_load_generation
         self._pending_image_path = path
-        worker = ImageLoadWorker(path)
+
+        for old_generation, old_worker in list(self._image_workers.items()):
+            old_worker.cancel()
+            if self._image_pool.tryTake(old_worker):
+                self._image_workers.pop(old_generation, None)
+
+        key = str(path)
+        cached = self._image_cache.get(key)
+        if cached is not None:
+            self._image_cache.move_to_end(key)
+            self._image_loaded(generation, key, cached)
+            return
+
+        worker = ImageLoadWorker(path, generation)
         worker.signals.loaded.connect(self._image_loaded)
         worker.signals.failed.connect(self._image_load_failed)
+        worker.signals.cancelled.connect(self._image_load_cancelled)
+        self._image_workers[generation] = worker
         self._image_pool.start(worker)
 
-    def _image_loaded(self, path_str: str, image: QImage) -> None:
-        if path_str != str(self._pending_image_path):
+    def _image_loaded(self, generation: int, path_str: str, image: QImage) -> None:
+        self._image_workers.pop(generation, None)
+        if generation != self._image_load_generation or path_str != str(self._pending_image_path):
             return
         self._pending_image_path = None
+        self._cache_full_image(path_str, image)
         self.canvas.set_image(image)
         self._status_label.setText(
             f"{self._current_index + 1} / {len(self._images)}    "
             f"{image.width()} × {image.height()}    {self._images[self._current_index]}"
         )
 
-    def _image_load_failed(self, path_str: str, error: str) -> None:
-        if path_str != str(self._pending_image_path):
+    def _cache_full_image(self, path_str: str, image: QImage) -> None:
+        size = max(1, image.sizeInBytes())
+        previous = self._image_cache.pop(path_str, None)
+        if previous is not None:
+            self._image_cache_bytes -= max(1, previous.sizeInBytes())
+        if size > self._image_cache_limit:
+            return
+        self._image_cache[path_str] = image
+        self._image_cache_bytes += size
+        while self._image_cache_bytes > self._image_cache_limit and self._image_cache:
+            _, evicted = self._image_cache.popitem(last=False)
+            self._image_cache_bytes -= max(1, evicted.sizeInBytes())
+
+    def _image_load_failed(self, generation: int, path_str: str, error: str) -> None:
+        self._image_workers.pop(generation, None)
+        if generation != self._image_load_generation or path_str != str(self._pending_image_path):
             return
         self._pending_image_path = None
         self._show_error(f"无法读取图片：\n{path_str}\n\n{error}")
+
+    def _image_load_cancelled(self, generation: int, _path_str: str) -> None:
+        self._image_workers.pop(generation, None)
 
     def _current_sort_mode(self) -> SortMode:
         data = self._sort_combo.currentData()
@@ -403,7 +468,9 @@ class MainWindow(QMainWindow):
 
     def clear_thumbnail_cache(self) -> None:
         removed = self.waterfall.clear_thumbnail_cache()
-        self._status_label.setText(f"已清理 {removed} 个磁盘缩略图缓存文件")
+        self._image_cache.clear()
+        self._image_cache_bytes = 0
+        self._status_label.setText(f"已清理 {removed} 个磁盘缩略图缓存文件和内存图片缓存")
 
     def toggle_fullscreen(self) -> None:
         if self.isFullScreen():
@@ -420,6 +487,8 @@ class MainWindow(QMainWindow):
             worker.cancel()
         self._image_load_generation += 1
         self._pending_image_path = None
+        for worker in self._image_workers.values():
+            worker.cancel()
         self.video_player.stop()
         super().closeEvent(event)
 

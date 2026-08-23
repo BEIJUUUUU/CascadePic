@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import suppress
 from pathlib import Path
 from threading import BoundedSemaphore, Event
 
@@ -42,29 +43,34 @@ class ThumbnailWorker(QRunnable):
     def cancel(self) -> None:
         self._cancelled.set()
 
+    @staticmethod
+    def _emit(signal, *args) -> None:
+        with suppress(RuntimeError):
+            signal.emit(*args)
+
     @Slot()
     def run(self) -> None:
         key = str(self.path)
         cached = self.disk_cache.load(self.path, self.target_width)
         if self._cancelled.is_set():
-            self.signals.cancelled.emit(self.generation, key, self.target_width)
+            self._emit(self.signals.cancelled, self.generation, key, self.target_width)
             return
         if cached is not None:
-            self.signals.loaded.emit(self.generation, key, self.target_width, cached, True)
+            self._emit(self.signals.loaded, self.generation, key, self.target_width, cached, True)
             return
 
         image = self._decode_video() if self.kind is MediaKind.VIDEO else self._decode_image()
         if self._cancelled.is_set():
-            self.signals.cancelled.emit(self.generation, key, self.target_width)
+            self._emit(self.signals.cancelled, self.generation, key, self.target_width)
             return
         if image is None or image.isNull():
-            self.signals.failed.emit(self.generation, key, self.target_width)
+            self._emit(self.signals.failed, self.generation, key, self.target_width)
             return
         self.disk_cache.store(self.path, self.target_width, image, self._cancelled.is_set)
         if self._cancelled.is_set():
-            self.signals.cancelled.emit(self.generation, key, self.target_width)
+            self._emit(self.signals.cancelled, self.generation, key, self.target_width)
             return
-        self.signals.loaded.emit(self.generation, key, self.target_width, image, False)
+        self._emit(self.signals.loaded, self.generation, key, self.target_width, image, False)
 
     def _decode_video(self) -> QImage | None:
         with _VIDEO_DECODE_LIMIT:

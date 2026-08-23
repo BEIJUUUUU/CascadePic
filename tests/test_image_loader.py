@@ -11,9 +11,9 @@ def test_worker_loads_valid_image(qtbot, tmp_path: Path) -> None:
     source.fill(QColor("orange"))
     assert source.save(str(path))
 
-    worker = ImageLoadWorker(path)
+    worker = ImageLoadWorker(path, generation=1)
     results: list[tuple[str, QImage]] = []
-    worker.signals.loaded.connect(lambda key, image: results.append((key, image)))
+    worker.signals.loaded.connect(lambda generation, key, image: results.append((key, image)))
     worker.signals.failed.connect(lambda *args: results.append(("failed", None)))
 
     worker.run()
@@ -28,10 +28,10 @@ def test_worker_reports_failure_for_broken_file(qtbot, tmp_path: Path) -> None:
     path = tmp_path / "broken.png"
     path.write_bytes(b"not a real image")
 
-    worker = ImageLoadWorker(path)
+    worker = ImageLoadWorker(path, generation=1)
     results: list[str] = []
     worker.signals.loaded.connect(lambda *args: results.append("loaded"))
-    worker.signals.failed.connect(lambda key, error: results.append(f"failed:{key}"))
+    worker.signals.failed.connect(lambda generation, key, error: results.append(f"failed:{key}"))
 
     worker.run()
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import suppress
 from pathlib import Path
 from threading import Event
 
@@ -27,17 +28,22 @@ class FolderScanWorker(QRunnable):
     def cancel(self) -> None:
         self._cancelled.set()
 
+    @staticmethod
+    def _emit(signal, *args) -> None:
+        with suppress(RuntimeError):
+            signal.emit(*args)
+
     @Slot()
     def run(self) -> None:
         try:
             items = scan_media_folder(self.folder, self._cancelled.is_set)
         except OSError as error:
             if self._cancelled.is_set():
-                self.signals.cancelled.emit(self.generation)
+                self._emit(self.signals.cancelled, self.generation)
             else:
-                self.signals.failed.emit(self.generation, str(error))
+                self._emit(self.signals.failed, self.generation, str(error))
             return
         if self._cancelled.is_set():
-            self.signals.cancelled.emit(self.generation)
+            self._emit(self.signals.cancelled, self.generation)
             return
-        self.signals.finished.emit(self.generation, items)
+        self._emit(self.signals.finished, self.generation, items)

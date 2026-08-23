@@ -14,6 +14,8 @@ class ImageCanvas(QGraphicsView):
         super().__init__()
         self._scene = QGraphicsScene(self)
         self._pixmap_item = QGraphicsPixmapItem()
+        self._pixmap_item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
+        self._pixmap_item.setShapeMode(QGraphicsPixmapItem.ShapeMode.BoundingRectShape)
         self._scene.addItem(self._pixmap_item)
         self.setScene(self._scene)
 
@@ -24,9 +26,9 @@ class ImageCanvas(QGraphicsView):
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
-        self.setRenderHints(
-            QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform
-        )
+        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        self.setOptimizationFlag(QGraphicsView.OptimizationFlag.DontSavePainterState, True)
+        self.setViewportUpdateMode(QGraphicsView.ViewportUpdateMode.SmartViewportUpdate)
 
     def has_image(self) -> bool:
         return not self._pixmap_item.pixmap().isNull()
@@ -61,6 +63,9 @@ class ImageCanvas(QGraphicsView):
             return
         current = self.transform().m11()
         target = current * factor
+        if 0.92 <= target <= 1.08:
+            factor = 1.0 / current
+            target = 1.0
         if 0.02 <= target <= 64.0:
             self._fit_mode = False
             self.scale(factor, factor)

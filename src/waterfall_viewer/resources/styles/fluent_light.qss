@@ -1,8 +1,8 @@
 /* Fluent-inspired light theme (Windows 11 look and feel). */
 
 * {
-    font-family: "Segoe UI Variable", "Segoe UI";
-    font-size: 10pt;
+    font-family: "Microsoft YaHei UI", "Segoe UI Variable", "Segoe UI";
+    font-size: 9pt;
     color: #1b1a19;
 }
 
@@ -31,9 +31,16 @@ QToolBar#mainToolbar QToolButton {
     background: transparent;
     border: 1px solid transparent;
     border-radius: 6px;
-    padding: 7px 11px;
+    padding: 3px;
+    min-width: 32px;
+    min-height: 32px;
     color: #201f1e;
-    font-weight: 500;
+}
+
+QLabel#toolbarLabel {
+    color: #605e5c;
+    font-size: 9pt;
+    padding: 0 4px 0 8px;
 }
 
 QToolBar#mainToolbar QToolButton:hover {
