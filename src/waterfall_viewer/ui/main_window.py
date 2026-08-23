@@ -82,6 +82,24 @@ class MainWindow(QMainWindow):
         self._viewer_close_button.clicked.connect(self.show_waterfall)
         self._viewer_close_button.hide()
 
+        self._viewer_previous_button = QToolButton(self._pages)
+        self._viewer_previous_button.setObjectName("viewerNavButton")
+        self._viewer_previous_button.setIcon(self._icon("previous"))
+        self._viewer_previous_button.setIconSize(QSize(24, 24))
+        self._viewer_previous_button.setToolTip("上一张  ←")
+        self._viewer_previous_button.setFixedSize(46, 46)
+        self._viewer_previous_button.clicked.connect(self.show_previous)
+        self._viewer_previous_button.hide()
+
+        self._viewer_next_button = QToolButton(self._pages)
+        self._viewer_next_button.setObjectName("viewerNavButton")
+        self._viewer_next_button.setIcon(self._icon("next"))
+        self._viewer_next_button.setIconSize(QSize(24, 24))
+        self._viewer_next_button.setToolTip("下一张  →")
+        self._viewer_next_button.setFixedSize(46, 46)
+        self._viewer_next_button.clicked.connect(self.show_next)
+        self._viewer_next_button.hide()
+
         self._status_label = QLabel("打开媒体文件或文件夹开始浏览")
         self.statusBar().addPermanentWidget(self._status_label, 1)
         self._create_toolbar()
@@ -268,6 +286,8 @@ class MainWindow(QMainWindow):
             self._status_label.setText(
                 f"{self._current_index + 1} / {len(items)}    {details}    {selected_path}"
             )
+            self._update_viewer_controls()
+            self._position_viewer_controls()
             return
 
         self._current_index = -1
@@ -421,10 +441,19 @@ class MainWindow(QMainWindow):
 
     def _set_current_page(self, page: QWidget) -> None:
         self._pages.setCurrentWidget(page)
-        self._viewer_close_button.setVisible(page is not self.waterfall)
-        self._position_viewer_close_button()
+        self._update_viewer_controls()
+        self._position_viewer_controls()
 
-    def _position_viewer_close_button(self) -> None:
+    def _update_viewer_controls(self) -> None:
+        if not hasattr(self, "_viewer_close_button"):
+            return
+        is_viewer = self._pages.currentWidget() is not self.waterfall
+        self._viewer_close_button.setVisible(is_viewer)
+        show_navigation = is_viewer and len(self._images) > 1
+        self._viewer_previous_button.setVisible(show_navigation)
+        self._viewer_next_button.setVisible(show_navigation)
+
+    def _position_viewer_controls(self) -> None:
         if not hasattr(self, "_viewer_close_button"):
             return
         margin = 14
@@ -432,6 +461,14 @@ class MainWindow(QMainWindow):
             self._pages.width() - self._viewer_close_button.width() - margin,
             margin,
         )
+        middle_y = max(12, (self._pages.height() - self._viewer_previous_button.height()) // 2)
+        self._viewer_previous_button.move(16, middle_y)
+        self._viewer_next_button.move(
+            self._pages.width() - self._viewer_next_button.width() - 16,
+            middle_y,
+        )
+        self._viewer_previous_button.raise_()
+        self._viewer_next_button.raise_()
         self._viewer_close_button.raise_()
 
     def _navigate_by_wheel(self, direction: int) -> None:
@@ -480,7 +517,7 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802 - Qt API name
         super().resizeEvent(event)
-        self._position_viewer_close_button()
+        self._position_viewer_controls()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt API name
         for worker in self._scan_workers.values():

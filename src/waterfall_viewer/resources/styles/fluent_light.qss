@@ -72,6 +72,23 @@ QToolButton#viewerCloseButton:pressed {
     background: #a02012;
 }
 
+QToolButton#viewerNavButton {
+    background: rgba(255, 255, 255, 225);
+    border: 1px solid rgba(0, 0, 0, 34);
+    border-radius: 23px;
+    padding: 5px;
+}
+
+QToolButton#viewerNavButton:hover {
+    background: rgba(255, 255, 255, 250);
+    border-color: rgba(0, 103, 192, 150);
+}
+
+QToolButton#viewerNavButton:pressed {
+    background: rgba(0, 103, 192, 45);
+    border-color: #0067c0;
+}
+
 QComboBox {
     background: #ffffff;
     border: 1px solid #c7c7c7;
