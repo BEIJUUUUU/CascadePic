@@ -12,6 +12,7 @@ from PySide6.QtGui import (
     QPainter,
     QPainterPath,
     QPaintEvent,
+    QPen,
     QPixmap,
     QResizeEvent,
 )
@@ -64,6 +65,8 @@ class WaterfallView(QAbstractScrollArea):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.viewport().setMouseTracking(True)
         self.verticalScrollBar().valueChanged.connect(self.viewport().update)
+        self._hover_index = -1
+        self._active_index = -1
 
     @property
     def items(self) -> tuple[MediaItem, ...]:
@@ -190,7 +193,7 @@ class WaterfallView(QAbstractScrollArea):
         for index in visible_indices:
             item = self._items[index]
             draw_rect = self._rects[index].translated(0, -scroll_y)
-            self._paint_item(painter, item, draw_rect)
+            self._paint_item(painter, item, draw_rect, index)
 
         visible_set = set(visible_indices)
         prioritized = visible_indices + [
@@ -203,32 +206,77 @@ class WaterfallView(QAbstractScrollArea):
                 break
             self._request_thumbnail(self._items[index])
 
-    def _paint_item(self, painter: QPainter, item: MediaItem, rect: QRectF) -> None:
+    def _paint_item(self, painter: QPainter, item: MediaItem, rect: QRectF, index: int) -> None:
         cache_key = (str(item.path), self._target_decode_width())
         pixmap = self._thumbnails.get(cache_key)
-        card_path = QPainterPath()
-        card_path.addRoundedRect(rect, 8, 8)
+
+        is_hovered = index == self._hover_index
+        active = index == self._active_index
+        radius = 9.0
+        card = rect.adjusted(0.5, 0.5, -0.5, -0.5)
+
+        def _rounded(where: QRectF, r: float) -> QPainterPath:
+            path = QPainterPath()
+            path.addRoundedRect(where, r, r)
+            return path
+
+        # Soft drop shadow (two alpha-gradient layers, offset downward).
+        for offset, alpha in ((2, 26), (1, 14)):
+            painter.fillPath(
+                _rounded(card.adjusted(0, offset, 0, offset), radius),
+                QColor(0, 0, 0, alpha),
+            )
+
+        # Card body.
+        card_path = _rounded(card, radius)
         if pixmap is None:
             painter.fillPath(card_path, QColor("#f0efed"))
             painter.setPen(QColor("#8a8886"))
             painter.drawText(
-                rect, Qt.AlignmentFlag.AlignCenter, item.path.suffix.upper().lstrip(".")
+                card, Qt.AlignmentFlag.AlignCenter, item.path.suffix.upper().lstrip(".")
             )
+            painter.setPen(QPen(QColor(0, 0, 0, 14), 1))
+            painter.drawPath(card_path)
         else:
             self._thumbnails.move_to_end(cache_key)
             painter.save()
             painter.setClipPath(card_path)
-            painter.drawPixmap(rect, pixmap, QRectF(pixmap.rect()))
+            painter.drawPixmap(card, pixmap, QRectF(pixmap.rect()))
             painter.restore()
+            painter.setPen(QPen(QColor(0, 0, 0, 18), 1))
+            painter.drawPath(card_path)
+
+        # Fluent accent outline on hover/active.
+        if is_hovered or active:
+            accent = QColor("#0067c0")
+            accent.setAlpha(220 if active else 150)
+            painter.setPen(QPen(accent, 2))
+            painter.drawPath(_rounded(rect.adjusted(-1, -1, 1, 1), radius + 1))
 
         if item.is_video:
             label = format_duration(item.duration_ms) if item.duration_ms else "VIDEO"
-            badge = QRectF(rect.right() - 72, rect.bottom() - 30, 64, 22)
-            badge_path = QPainterPath()
-            badge_path.addRoundedRect(badge, 6, 6)
-            painter.fillPath(badge_path, QColor(0, 0, 0, 170))
+            badge = QRectF(card.right() - 68, card.bottom() - 28, 60, 20)
+            painter.fillPath(_rounded(badge, 6), QColor(0, 0, 0, 170))
             painter.setPen(QColor("#ffffff"))
             painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, label)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt API name
+        content_point = event.position() + QPointF(0, self.verticalScrollBar().value())
+        point_area = QRectF(content_point.x(), content_point.y(), 1, 1)
+        previous = self._hover_index
+        self._hover_index = -1
+        for index in self._indices_intersecting(point_area):
+            if self._rects[index].contains(content_point):
+                self._hover_index = index
+                break
+        if self._hover_index != previous:
+            self.viewport().update()
+
+    def leaveEvent(self, event) -> None:  # noqa: N802 - Qt API name
+        if self._hover_index != -1:
+            self._hover_index = -1
+            self.viewport().update()
+        super().leaveEvent(event)
 
     def _target_decode_width(self) -> int:
         pixel_ratio = max(1.0, self.devicePixelRatioF())
@@ -319,6 +367,8 @@ class WaterfallView(QAbstractScrollArea):
         point_area = QRectF(content_point.x(), content_point.y(), 1, 1)
         for index in self._indices_intersecting(point_area):
             if self._rects[index].contains(content_point):
+                self._active_index = index
+                self.viewport().update()
                 self.activated.emit(self._items[index].path)
                 event.accept()
                 return

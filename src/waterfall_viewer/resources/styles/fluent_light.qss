@@ -1,3 +1,5 @@
+/* Fluent-inspired light theme (Windows 11 look and feel). */
+
 * {
     font-family: "Segoe UI Variable", "Segoe UI";
     font-size: 10pt;
@@ -7,15 +9,16 @@
 QMainWindow,
 QDialog,
 QWidget {
-    background-color: #faf9f8;
+    background-color: #f3f3f3;
 }
 
 QToolBar#mainToolbar {
-    background-color: #ffffff;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #fbfbfb, stop:1 #f6f6f6);
     border: none;
     border-bottom: 1px solid #e1dfdd;
     spacing: 6px;
-    padding: 8px 12px;
+    padding: 9px 12px;
 }
 
 QToolBar#mainToolbar::separator {
@@ -27,19 +30,20 @@ QToolBar#mainToolbar::separator {
 QToolBar#mainToolbar QToolButton {
     background: transparent;
     border: 1px solid transparent;
-    border-radius: 7px;
-    padding: 7px 10px;
+    border-radius: 6px;
+    padding: 7px 11px;
     color: #201f1e;
+    font-weight: 500;
 }
 
 QToolBar#mainToolbar QToolButton:hover {
-    background: #f3f2f1;
-    border-color: #d1d1d1;
+    background: rgba(0, 103, 192, 0.08);
+    border-color: rgba(0, 103, 192, 0.20);
 }
 
 QToolBar#mainToolbar QToolButton:pressed {
-    background: #e1dfdd;
-    border-color: #c7c7c7;
+    background: rgba(0, 103, 192, 0.16);
+    border-color: rgba(0, 103, 192, 0.28);
 }
 
 QToolButton#viewerCloseButton {
@@ -47,7 +51,7 @@ QToolButton#viewerCloseButton {
     color: #201f1e;
     border: 1px solid #d1d1d1;
     border-radius: 19px;
-    font-size: 20px;
+    font-size: 19px;
     font-weight: 500;
 }
 
@@ -64,7 +68,7 @@ QToolButton#viewerCloseButton:pressed {
 QComboBox {
     background: #ffffff;
     border: 1px solid #c7c7c7;
-    border-radius: 7px;
+    border-radius: 6px;
     padding: 6px 28px 6px 10px;
     min-height: 20px;
     color: #201f1e;
@@ -84,7 +88,7 @@ QComboBox QAbstractItemView {
     background: #ffffff;
     border: 1px solid #c7c7c7;
     border-radius: 7px;
-    selection-background-color: #cfe6f7;
+    selection-background-color: rgba(0, 103, 192, 0.14);
     selection-color: #1b1a19;
     outline: none;
     padding: 5px;
@@ -118,9 +122,10 @@ QSlider::handle:horizontal:hover {
 QPushButton {
     background: #ffffff;
     border: 1px solid #c7c7c7;
-    border-radius: 7px;
+    border-radius: 6px;
     padding: 7px 12px;
     color: #201f1e;
+    font-weight: 500;
 }
 
 QPushButton:hover {
@@ -151,7 +156,7 @@ QPushButton#playButton:hover {
 }
 
 QWidget#videoControls {
-    background: #faf9f8;
+    background: #fbfbfb;
     border-top: 1px solid #e1dfdd;
 }
 
@@ -166,7 +171,7 @@ QLabel#timeLabel {
 }
 
 QStatusBar {
-    background: #ffffff;
+    background: #faf9f8;
     border-top: 1px solid #e1dfdd;
     color: #605e5c;
     min-height: 24px;
