@@ -1,10 +1,10 @@
-# Build a distributable Waterfall Media Viewer folder with PyInstaller.
+# Build a distributable CascadePic folder with PyInstaller.
 #
 # Usage:
 #   .\build.ps1
 #   .\build.ps1 -VlcDir "C:\Program Files\VideoLAN\VLC" -Ffmpeg "E:\tools\ffmpeg.exe" -Ffprobe "E:\tools\ffprobe.exe"
 #
-# The output lands in dist\WaterfallMediaViewer\ and contains the viewer
+# The output lands in dist\CascadePic\ and contains the viewer
 # executable, libVLC runtime (when available) and ffmpeg/ffprobe (when found).
 
 param(
@@ -31,7 +31,7 @@ Write-Host "== Running PyInstaller =="
 & $py -m PyInstaller --noconfirm --clean packaging\waterfall_viewer.spec
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-$dist = Join-Path $root "dist\WaterfallMediaViewer"
+$dist = Join-Path $root "dist\CascadePic"
 if (-not (Test-Path $dist)) {
     Write-Error "Expected output directory $dist was not created."
     exit 1

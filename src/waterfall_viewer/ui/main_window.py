@@ -61,7 +61,8 @@ class MainWindow(QMainWindow):
         self._movie_path: Path | None = None
         self._movie_first_frame = True
 
-        self.setWindowTitle("Waterfall Media Viewer")
+        self.setWindowTitle("CascadePic 流瀑看图")
+        self.setWindowIcon(QIcon(str(Path(__file__).parent.parent / "resources" / "icons" / "app_logo.png")))
         self.resize(1200, 800)
 
         self.canvas = ImageCanvas()
@@ -297,7 +298,7 @@ class MainWindow(QMainWindow):
         self._current_index = -1
         self.video_player.stop()
         self._set_current_page(self.waterfall)
-        self.setWindowTitle(f"{folder_label} — Waterfall Media Viewer")
+        self.setWindowTitle(f"{folder_label} — CascadePic 流瀑看图")
         self._status_label.setText(f"共 {len(items)} 个媒体文件    {folder_label}")
 
     def _folder_scan_failed(self, generation: int, error: str) -> None:
@@ -346,7 +347,7 @@ class MainWindow(QMainWindow):
                 self._show_error(f"无法播放视频，请确认 VLC 可用：\n{path}")
                 return False
             self._set_current_page(self.video_player)
-            self.setWindowTitle(f"{path.name} — Waterfall Media Viewer")
+            self.setWindowTitle(f"{path.name} — CascadePic 流瀑看图")
             item = self._item_by_path.get(path)
             duration = (
                 f"    {format_duration(item.duration_ms)}"
@@ -362,7 +363,7 @@ class MainWindow(QMainWindow):
             return False
         self.video_player.stop()
         self._set_current_page(self.canvas)
-        self.setWindowTitle(f"{path.name} — Waterfall Media Viewer")
+        self.setWindowTitle(f"{path.name} — CascadePic 流瀑看图")
         if path.suffix.casefold() == ".gif":
             self._status_label.setText(f"正在加载动图：{path.name}")
             return self._start_movie(path)
@@ -540,11 +541,11 @@ class MainWindow(QMainWindow):
         self._stop_movie()
         self._set_current_page(self.waterfall)
         if not self._folder_items:
-            self.setWindowTitle("Waterfall Media Viewer")
+            self.setWindowTitle("CascadePic 流瀑看图")
             self._status_label.setText("打开媒体文件或文件夹开始浏览")
             return
         folder = self._folder_items[0].path.parent
-        self.setWindowTitle(f"{folder} — Waterfall Media Viewer")
+        self.setWindowTitle(f"{folder} — CascadePic 流瀑看图")
         self._status_label.setText(f"共 {len(self._folder_items)} 个媒体文件    {folder}")
 
     def show_previous(self) -> None:

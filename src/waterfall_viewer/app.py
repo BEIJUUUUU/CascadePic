@@ -7,7 +7,7 @@ from contextlib import suppress
 from pathlib import Path
 
 from PySide6.QtCore import QTimer
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtGui import QColor, QIcon, QPalette
 from PySide6.QtWidgets import QApplication
 
 
@@ -79,8 +79,11 @@ def main() -> int:
     from waterfall_viewer.ui.main_window import MainWindow
 
     app = QApplication(sys.argv)
-    app.setApplicationName("Waterfall Media Viewer")
-    app.setOrganizationName("Waterfall Media Viewer")
+    app.setApplicationName("CascadePic (流瀑看图)")
+    app.setApplicationDisplayName("CascadePic 流瀑看图")
+    app.setOrganizationName("CascadePic")
+    app_icon = QIcon(str(Path(__file__).parent / "resources" / "icons" / "app_logo.png"))
+    app.setWindowIcon(app_icon)
     app.setStyle("Fusion")
     _apply_palette(app)
     _apply_stylesheet(app)

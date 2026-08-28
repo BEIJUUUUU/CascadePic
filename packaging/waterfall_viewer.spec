@@ -30,7 +30,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="WaterfallMediaViewer",
+    name="CascadePic",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -41,7 +41,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon="icon.ico",
+    icon="../src/waterfall_viewer/resources/icons/app_logo.ico",
 )
 
 coll = COLLECT(
@@ -50,5 +50,5 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    name="WaterfallMediaViewer",
+    name="CascadePic",
 )

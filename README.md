@@ -1,36 +1,39 @@
-# 🌊 Waterfall Media Viewer (瀑布流媒体查看器)
+# 🌊 CascadePic (流瀑看图)
 
 <div align="center">
 
-![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4?logo=windows)
-![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python)
-![Qt](https://img.shields.io/badge/GUI-PySide6%20%2F%20Qt%206-41CD52?logo=qt)
-![License](https://img.shields.io/badge/license-MIT-blue)
-![Offline](https://img.shields.io/badge/privacy-100%25%20Offline-success)
+<img src="docs/app_logo.png" alt="CascadePic Logo" width="128" height="128"/>
 
-**一款专为 Windows 打造的轻量级、极速现代本地图片与视频瀑布流查看器。**  
-告别传统单图软件来回切图的繁琐，以现代化瀑布流卡片尽览整个文件夹的美图与短视频。
+### **流瀑看图 • 专为 Windows 打造的极速现代化媒体画廊**
+*A high-performance, minimalist Windows waterfall image & video viewer.*
 
-[✨ 核心亮点](#-核心亮点) • [📸 界面预览](#-界面预览) • [🚀 快速使用](#-快速使用) • [⌨️ 快捷键指南](#️-快捷键指南) • [🛠️ 本地构建](#️-本地构建)
+[![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D4?logo=windows&logoColor=white)](https://github.com/BEIJUUUUU/waterfall-media-viewer)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://python.org)
+[![Qt](https://img.shields.io/badge/GUI-PySide6%20%2F%20Qt%206-41CD52?logo=qt&logoColor=white)](https://www.qt.io/)
+[![Release](https://img.shields.io/github/v/release/BEIJUUUUU/waterfall-media-viewer?color=orange&logo=github)](https://github.com/BEIJUUUUU/waterfall-media-viewer/releases)
+[![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
+[![Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline-success)](#)
+
+[✨ 核心特性](#-核心特性) • [📸 界面预览](#-界面预览) • [📥 下载与安装](#-下载与安装) • [⌨️ 快捷键指南](#️-快捷键指南) • [🛠️ 本地构建](#️-本地构建)
 
 </div>
 
 ---
 
-## ✨ 核心亮点
+## ✨ 核心特性
 
-- ⚡ **超流畅虚拟瀑布流**：数万张图片与视频瞬间秒开，基于可视区域动态渲染，内存占用始终极低。
-- 🖼️ **全格式全面支持**：
-  - **静态图片**：JPG, JPEG, JFIF, PNG, WebP, BMP, ICO, TIFF...
-  - **动态动图**：GIF 逐帧原速流畅播放。
-  - **高清视频**：MP4, MKV, WebM, MOV, AVI, WMV, M4V（基于内置 libVLC 高清解码与硬件加速）。
+- ⚡ **超流畅虚拟化瀑布流**：面对上万张图片与视频目录瞬间加载，仅按需动态渲染可见卡片，内存占用始终极低。
+- 🖼️ **全格式无缝支持**：
+  - **静态图像**：JPG, JPEG, JFIF, PNG, WebP, BMP, ICO, TIFF...
+  - **动态动图**：GIF 逐帧原速流畅播放，支持逐帧查看。
+  - **高清视频**：MP4, MKV, WebM, MOV, AVI, WMV, M4V（内置完整 libVLC 解码器与硬件加速）。
 - 🔍 **专业看图体验**：
-  - 高质量平滑抗锯齿缩放与智能 100% 像素对齐。
-  - 类似 Honeyview 的高效手势：**鼠标右键 + 滚轮实时缩放**、纯滚轮快速切图。
-  - 界面两侧悬浮半透明箭头，鼠标轻轻一点随心切换。
-- 🎬 **轻量视频播放器**：
+  - 高质量平滑抗锯齿缩放与智能 100% 像素吸附对齐（告别模糊与锯齿）。
+  - 类似 Honeyview 的高效手势：**鼠标右键 + 滚轮平滑缩放**、滚轮快速切图。
+  - 界面两侧智能浮动导航箭头，鼠标轻点轻松切换。
+- 🎬 **轻量一体化视频播放**：
   - 瀑布流中实时显示视频时长徽章与提取的高清首帧封面。
-  - 单击无缝进入播放模式，支持进度条即点即跳（JumpSlider）、音量调节、滚轮切集。
+  - 单击即可无缝播放，支持 JumpSlider 进度条即点即跳、音量控制、滚轮直接切集。
 - 🎨 **现代化 Windows 11 Fluent 视觉**：
   - 原生级精雕细琢的浅色 Modern UI、精致微投影、圆角卡片。
   - 极简图标化工具栏，纯净无广告，100% 离线保护隐私。
@@ -40,17 +43,19 @@
 ## 📸 界面预览
 
 <div align="center">
-  <img src="docs/ui-preview-fluent.png" alt="瀑布流媒体查看器界面" width="880"/>
+  <img src="docs/ui-preview-fluent.png" alt="CascadePic 流瀑看图界面预览" width="880"/>
 </div>
 
 ---
 
-## 🚀 快速使用
+## 📥 下载与安装
 
-### 1. 免安装即开即用（推荐）
-直接运行 `dist\WaterfallMediaViewer\WaterfallMediaViewer.exe` 即可启动，无需安装任何 Python 环境与第三方依赖。
+### 方式一：下载免安装便携版（推荐）
+前往 [GitHub Releases 页面](https://github.com/BEIJUUUUU/waterfall-media-viewer/releases) 下载最新的 `CascadePic-v1.0.0-windows-x64.zip`。  
+解压后直接双击 **`CascadePic.exe`** 即可使用，无需安装 Python 或任何额外运行库。
 
-### 2. 双击便捷启动
+### 方式二：源码双击运行
+如果你已克隆本项目源码：
 - **`启动查看器.vbs`**：静默在后台启动软件，无任何黑框命令行打扰。
 - **`调试启动.bat`**：带控制台窗口启动，方便排查开发错误。
 
@@ -98,7 +103,7 @@ python -m waterfall_viewer
 ```powershell
 .\build.ps1
 ```
-打包产物将自动生成于 `dist\WaterfallMediaViewer\` 目录。
+打包产物将自动生成于 `dist\CascadePic\` 目录。
 
 ---
 
