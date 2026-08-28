@@ -1,93 +1,71 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <!-- Background Gradient -->
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0078D4"/>
-      <stop offset="60%" stop-color="#005A9E"/>
-      <stop offset="100%" stop-color="#003966"/>
+    <!-- Background: Clean, modern iOS/macOS/Fluent frosted dark glass & blue depth -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#0284C7"/>
     </linearGradient>
 
-    <!-- Card 1 (Left Back) -->
-    <linearGradient id="cardLeft" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#50E6FF" stop-opacity="0.95"/>
-      <stop offset="100%" stop-color="#00A2ED" stop-opacity="0.85"/>
+    <!-- Column 1 (Left: Cyan Flow) -->
+    <linearGradient id="col1" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#0284C7"/>
     </linearGradient>
 
-    <!-- Card 2 (Center Mid) -->
-    <linearGradient id="cardMid" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.98"/>
-      <stop offset="100%" stop-color="#E1F0FA" stop-opacity="0.92"/>
+    <!-- Column 2 (Center: White / Light Cascade) -->
+    <linearGradient id="col2" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#BAE6FD"/>
     </linearGradient>
 
-    <!-- Card 3 (Right Front) -->
-    <linearGradient id="cardRight" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#40C8FF" stop-opacity="0.95"/>
-      <stop offset="100%" stop-color="#0078D4" stop-opacity="0.88"/>
+    <!-- Column 3 (Right: Royal Blue Flow) -->
+    <linearGradient id="col3" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#60A5FA"/>
+      <stop offset="100%" stop-color="#2563EB"/>
     </linearGradient>
 
-    <!-- Sun Gradient in Center Card -->
-    <linearGradient id="sunGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FFA800"/>
-      <stop offset="100%" stop-color="#FF5E00"/>
+    <!-- Mountain Gradient -->
+    <linearGradient id="mount" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0284C7"/>
+      <stop offset="100%" stop-color="#0F172A"/>
     </linearGradient>
 
-    <!-- Mountain Gradient in Center Card -->
-    <linearGradient id="mountGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#0078D4"/>
-      <stop offset="100%" stop-color="#004578"/>
-    </linearGradient>
-
-    <!-- Soft Drop Shadow Filter -->
-    <filter id="shadow" x="-15%" y="-15%" width="130%" height="130%">
-      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#001833" flood-opacity="0.35"/>
+    <!-- Clean, soft ambient shadow -->
+    <filter id="ambientShadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#0284C7" flood-opacity="0.25"/>
     </filter>
 
-    <filter id="cardShadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#001833" flood-opacity="0.25"/>
+    <filter id="pillShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0F172A" flood-opacity="0.30"/>
     </filter>
   </defs>
 
-  <!-- App Rounded Squircle Base -->
-  <rect x="32" y="32" width="448" height="448" rx="104" fill="url(#bgGrad)" filter="url(#shadow)"/>
+  <!-- Base Squircle -->
+  <rect x="32" y="32" width="448" height="448" rx="112" fill="url(#bg)" filter="url(#ambientShadow)"/>
+  <!-- Crisp highlight inner border -->
+  <rect x="33" y="33" width="446" height="446" rx="111" fill="none" stroke="#FFFFFF" stroke-opacity="0.16" stroke-width="2"/>
 
-  <!-- Subtle Inner Border Highlight -->
-  <rect x="33" y="33" width="446" height="446" rx="103" fill="none" stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="2"/>
-
-  <!-- Decorative Wave / Cascade Curve in Background -->
-  <path d="M32 320 C 140 280, 260 400, 480 340 L 480 480 L 32 480 Z" fill="#000000" fill-opacity="0.12"/>
-  <path d="M32 360 C 180 320, 300 440, 480 380 L 480 480 L 32 480 Z" fill="#000000" fill-opacity="0.10"/>
-
-  <!-- Left Column Card (Cascade Pillar 1 - Short) -->
-  <g filter="url(#cardShadow)">
-    <rect x="88" y="112" width="92" height="156" rx="18" fill="url(#cardLeft)"/>
-    <!-- Image placeholder lines/icons inside left card -->
-    <circle cx="134" cy="156" r="16" fill="#FFFFFF" fill-opacity="0.8"/>
-    <path d="M96 230 C 112 210, 126 215, 142 225 C 154 233, 168 220, 172 224 L 172 250 C 172 260, 164 268, 154 268 L 106 268 C 96 268, 88 260, 88 250 Z" fill="#005A9E" fill-opacity="0.6"/>
+  <!-- Left Column (Cascade Bar 1 - Lower offset) -->
+  <g filter="url(#pillShadow)">
+    <rect x="100" y="160" width="80" height="200" rx="40" fill="url(#col1)"/>
+    <!-- Minimal dot / circle inside -->
+    <circle cx="140" cy="204" r="14" fill="#FFFFFF" fill-opacity="0.9"/>
   </g>
 
-  <!-- Center Main Card (Cascade Pillar 2 - Long / Hero) -->
-  <g filter="url(#cardShadow)">
-    <rect x="196" y="80" width="120" height="236" rx="20" fill="url(#cardMid)"/>
-    <!-- Sun -->
-    <circle cx="236" cy="136" r="18" fill="url(#sunGrad)"/>
-    <!-- Mountain Peaks (Picture icon representation) -->
-    <path d="M200 270 L 235 210 L 265 250 L 285 225 L 312 265 C 315 270, 316 276, 316 282 C 316 294, 306 304, 294 304 L 218 304 C 206 304, 196 294, 196 282 C 196 278, 197 274, 200 270 Z" fill="url(#mountGrad)"/>
-    <!-- Play Icon Overlay Badge on Center Card (Video Representation) -->
-    <circle cx="282" cy="132" r="14" fill="#0078D4"/>
-    <polygon points="278,124 289,132 278,140" fill="#FFFFFF"/>
+  <!-- Center Column (Cascade Bar 2 - Tall / Hero with Mountain & Sun) -->
+  <g filter="url(#pillShadow)">
+    <!-- Main white card -->
+    <rect x="206" y="104" width="100" height="296" rx="50" fill="url(#col2)"/>
+    <!-- Clean Minimal Sun -->
+    <circle cx="256" cy="168" r="18" fill="#F59E0B"/>
+    <!-- Minimalist Geometric Mountain -->
+    <path d="M214 340 L 244 285 L 268 322 L 282 304 L 298 340 Z" fill="url(#mount)"/>
   </g>
 
-  <!-- Right Column Card (Cascade Pillar 3 - Medium) -->
-  <g filter="url(#cardShadow)">
-    <rect x="332" y="148" width="92" height="184" rx="18" fill="url(#cardRight)"/>
-    <!-- Mountain in Right Card -->
-    <circle cx="378" cy="190" r="15" fill="#FFFFFF" fill-opacity="0.9"/>
-    <path d="M336 290 L 366 245 L 392 280 L 406 265 L 420 285 C 423 289, 424 294, 424 298 C 424 308, 416 316, 406 316 L 350 316 C 340 316, 332 308, 332 298 C 332 295, 333 292, 336 290 Z" fill="#003966" fill-opacity="0.5"/>
-  </g>
-
-  <!-- Flowing Ripple / Cascade Waves at Bottom -->
-  <g filter="url(#cardShadow)">
-    <path d="M104 380 C 190 350, 310 410, 408 375" fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" stroke-opacity="0.95"/>
-    <path d="M144 412 C 216 388, 296 436, 368 408" fill="none" stroke="#50E6FF" stroke-width="6" stroke-linecap="round" stroke-opacity="0.85"/>
+  <!-- Right Column (Cascade Bar 3 - Medium offset with Play Triangle) -->
+  <g filter="url(#pillShadow)">
+    <rect x="332" y="136" width="80" height="232" rx="40" fill="url(#col3)"/>
+    <!-- Minimalist Play Icon for Video -->
+    <polygon points="368,236 384,248 368,260" fill="#FFFFFF" fill-opacity="0.95"/>
   </g>
 </svg>

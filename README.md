@@ -7,10 +7,10 @@
 ### **流瀑看图 • 专为 Windows 打造的极速现代化媒体画廊**
 *A high-performance, minimalist Windows waterfall image & video viewer.*
 
-[![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D4?logo=windows&logoColor=white)](https://github.com/BEIJUUUUU/waterfall-media-viewer)
+[![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D4?logo=windows&logoColor=white)](https://github.com/BEIJUUUUU/CascadePic)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://python.org)
 [![Qt](https://img.shields.io/badge/GUI-PySide6%20%2F%20Qt%206-41CD52?logo=qt&logoColor=white)](https://www.qt.io/)
-[![Release](https://img.shields.io/github/v/release/BEIJUUUUU/waterfall-media-viewer?color=orange&logo=github)](https://github.com/BEIJUUUUU/waterfall-media-viewer/releases)
+[![Release](https://img.shields.io/github/v/release/BEIJUUUUU/CascadePic?color=orange&logo=github)](https://github.com/BEIJUUUUU/CascadePic/releases)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline-success)](#)
 
@@ -51,7 +51,7 @@
 ## 📥 下载与安装
 
 ### 方式一：下载免安装便携版（推荐）
-前往 [GitHub Releases 页面](https://github.com/BEIJUUUUU/waterfall-media-viewer/releases) 下载最新的 `CascadePic-v1.0.0-windows-x64.zip`。  
+前往 [GitHub Releases 页面](https://github.com/BEIJUUUUU/CascadePic/releases) 下载最新的 `CascadePic-v1.0.0-windows-x64.zip`。  
 解压后直接双击 **`CascadePic.exe`** 即可使用，无需安装 Python 或任何额外运行库。
 
 ### 方式二：源码双击运行
