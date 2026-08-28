@@ -52,6 +52,12 @@ if ($VlcDir -and (Test-Path (Join-Path $VlcDir "libvlc.dll"))) {
     Copy-Item (Join-Path $VlcDir "libvlccore.dll") $dist -Force
     if (Test-Path (Join-Path $VlcDir "plugins")) {
         Copy-Item (Join-Path $VlcDir "plugins") $dist -Recurse -Force
+        # Remove unused non-essential plugins to save ~35MB
+        $prune = @("gui", "lua", "access_output", "stream_out", "visualization", "services_discovery")
+        foreach ($p in $prune) {
+            $target = Join-Path $dist "plugins\$p"
+            if (Test-Path $target) { Remove-Item $target -Recurse -Force }
+        }
     }
 } else {
     Write-Warning "VLC was not found. Video playback will be disabled in this build."
@@ -69,11 +75,10 @@ if ($Ffmpeg -and (Test-Path $Ffmpeg)) {
 } else {
     Write-Warning "ffmpeg was not found. Video thumbnails will be disabled in this build."
 }
-if ($Ffprobe -and (Test-Path $Ffprobe)) {
+# Note: ffprobe is now optional and omitted from default distribution because ffmpeg handles metadata directly (-77MB saving!)
+if ($Ffprobe -and (Test-Path $Ffprobe) -and ($args -contains "-IncludeFfprobe")) {
     Write-Host "== Bundling ffprobe =="
     Copy-Item $Ffprobe (Join-Path $dist "ffprobe.exe") -Force
-} else {
-    Write-Warning "ffprobe was not found. Video metadata will be disabled in this build."
 }
 
 $size = (Get-ChildItem $dist -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB

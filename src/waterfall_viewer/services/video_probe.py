@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -24,6 +25,7 @@ class VideoMetadata:
 class _ProcessResult:
     returncode: int
     stdout: bytes
+    stderr: bytes = b""
 
 
 def find_ffprobe() -> str | None:
@@ -41,35 +43,56 @@ def probe_video(
     executable: str | None = None,
     should_cancel: Callable[[], bool] | None = None,
 ) -> VideoMetadata | None:
-    executable = executable or find_ffprobe()
-    if executable is None:
+    # 1. Try ffprobe first if available (fast json output)
+    ffprobe_bin = executable or find_ffprobe()
+    if ffprobe_bin is not None:
+        command = [
+            ffprobe_bin,
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height:format=duration",
+            "-of",
+            "json",
+            str(path),
+        ]
+        result = _run_process(command, timeout=20, should_cancel=should_cancel)
+        if result is not None and result.returncode == 0:
+            try:
+                payload = json.loads(result.stdout.decode("utf-8", errors="replace"))
+                stream = payload.get("streams", [{}])[0]
+                width = int(stream.get("width", 0))
+                height = int(stream.get("height", 0))
+                duration_ms = max(0, round(float(payload.get("format", {}).get("duration", 0)) * 1000))
+                if width > 0 and height > 0:
+                    return VideoMetadata(width=width, height=height, duration_ms=duration_ms)
+            except (ValueError, TypeError, IndexError, json.JSONDecodeError):
+                pass
+
+    # 2. Fallback to ffmpeg -i info header (allows omitting the ~80MB ffprobe binary!)
+    ffmpeg_bin = find_ffmpeg()
+    if ffmpeg_bin is None:
         return None
-    command = [
-        executable,
-        "-v",
-        "error",
-        "-select_streams",
-        "v:0",
-        "-show_entries",
-        "stream=width,height:format=duration",
-        "-of",
-        "json",
-        str(path),
-    ]
+    command = [ffmpeg_bin, "-hide_banner", "-i", str(path)]
     result = _run_process(command, timeout=20, should_cancel=should_cancel)
-    if result is None or result.returncode != 0:
+    if result is None:
         return None
-    try:
-        payload = json.loads(result.stdout.decode("utf-8", errors="replace"))
-        stream = payload.get("streams", [{}])[0]
-        width = int(stream.get("width", 0))
-        height = int(stream.get("height", 0))
-    except (ValueError, TypeError, IndexError, json.JSONDecodeError):
+    info = (result.stderr or result.stdout).decode("utf-8", errors="replace")
+    
+    # Parse Duration: HH:MM:SS.ms
+    dur_match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", info)
+    duration_ms = 0
+    if dur_match:
+        h, m, s = dur_match.groups()
+        duration_ms = int((int(h) * 3600 + int(m) * 60 + float(s)) * 1000)
+
+    # Parse Video Stream: Video: ..., 1920x1080 [SAR ...
+    vid_match = re.search(r"Stream #.*?: Video: .*?, (\d{2,5})x(\d{2,5})", info)
+    if not vid_match:
         return None
-    try:
-        duration_ms = max(0, round(float(payload.get("format", {}).get("duration", 0)) * 1000))
-    except (ValueError, TypeError):
-        duration_ms = 0
+    width, height = int(vid_match.group(1)), int(vid_match.group(2))
     if width <= 0 or height <= 0:
         return None
     return VideoMetadata(width=width, height=height, duration_ms=duration_ms)
@@ -126,8 +149,8 @@ def _run_process(
     deadline = monotonic() + timeout
     while True:
         try:
-            stdout, _ = process.communicate(timeout=0.1)
-            return _ProcessResult(process.returncode, stdout)
+            stdout, stderr = process.communicate(timeout=0.1)
+            return _ProcessResult(process.returncode, stdout, stderr)
         except subprocess.TimeoutExpired:
             cancelled = should_cancel is not None and should_cancel()
             if not cancelled and monotonic() < deadline:
