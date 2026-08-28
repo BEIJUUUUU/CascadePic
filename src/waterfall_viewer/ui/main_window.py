@@ -79,7 +79,8 @@ class MainWindow(QMainWindow):
 
         self._viewer_close_button = QToolButton(self._pages)
         self._viewer_close_button.setObjectName("viewerCloseButton")
-        self._viewer_close_button.setText("×")
+        self._viewer_close_button.setIcon(self._icon("close"))
+        self._viewer_close_button.setIconSize(QSize(18, 18))
         self._viewer_close_button.setToolTip("返回瀑布流 (Esc)")
         self._viewer_close_button.setFixedSize(38, 38)
         self._viewer_close_button.clicked.connect(self.show_waterfall)

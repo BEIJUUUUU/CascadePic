@@ -55,17 +55,14 @@ QToolBar#mainToolbar QToolButton:pressed {
 
 QToolButton#viewerCloseButton {
     background: rgba(255, 255, 255, 235);
-    color: #201f1e;
-    border: 1px solid #d1d1d1;
+    border: 1px solid rgba(0, 0, 0, 35);
     border-radius: 19px;
-    font-size: 19px;
-    font-weight: 500;
+    padding: 6px;
 }
 
 QToolButton#viewerCloseButton:hover {
     background: #c42b1c;
     border-color: #c42b1c;
-    color: #ffffff;
 }
 
 QToolButton#viewerCloseButton:pressed {
@@ -171,12 +168,14 @@ QPushButton#playButton {
     max-width: 34px;
     max-height: 34px;
     padding: 0;
-    font-size: 13px;
-    font-weight: 700;
 }
 
 QPushButton#playButton:hover {
     background: #0078d4;
+}
+
+QPushButton#playButton:pressed {
+    background: #005a9e;
 }
 
 QWidget#videoControls {

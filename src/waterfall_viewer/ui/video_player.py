@@ -10,8 +10,8 @@ try:
 except (ImportError, OSError):
     vlc = None
 
-from PySide6.QtCore import QEvent, QRunnable, Qt, QThreadPool, QTimer, Signal, Slot
-from PySide6.QtGui import QWheelEvent
+from PySide6.QtCore import QEvent, QRunnable, QSize, Qt, QThreadPool, QTimer, Signal, Slot
+from PySide6.QtGui import QIcon, QWheelEvent
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from waterfall_viewer.ui.jump_slider import JumpSlider
@@ -61,19 +61,31 @@ class VideoPlayer(QWidget):
         self.video_surface.setAttribute(Qt.WidgetAttribute.WA_NativeWindow, True)
         self.video_surface.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.video_surface.installEventFilter(self)
-        self.play_button = QPushButton("▶")
+        self._icon_play = QIcon(str(Path(__file__).parent.parent / "resources" / "icons" / "play.svg"))
+        self._icon_pause = QIcon(str(Path(__file__).parent.parent / "resources" / "icons" / "pause.svg"))
+        self._icon_volume = QIcon(str(Path(__file__).parent.parent / "resources" / "icons" / "volume.svg"))
+
+        self.play_button = QPushButton()
         self.play_button.setObjectName("playButton")
-        self.play_button.setToolTip("播放 / 暂停")
+        self.play_button.setIcon(self._icon_play)
+        self.play_button.setIconSize(QSize(15, 15))
+        self.play_button.setToolTip("播放 / 暂停 (Space)")
         self.position_slider = JumpSlider(Qt.Orientation.Horizontal)
         self.position_slider.setObjectName("positionSlider")
         self.position_slider.setRange(0, 1000)
         self.time_label = QLabel("0:00 / 0:00")
         self.time_label.setObjectName("timeLabel")
+
+        vol_icon_label = QLabel()
+        vol_icon_label.setObjectName("volumeIcon")
+        vol_icon_label.setPixmap(self._icon_volume.pixmap(16, 16))
+        vol_icon_label.setToolTip("音量")
+
         self.volume_slider = JumpSlider(Qt.Orientation.Horizontal)
         self.volume_slider.setObjectName("volumeSlider")
         self.volume_slider.setRange(0, 100)
         self.volume_slider.setValue(80)
-        self.volume_slider.setFixedWidth(120)
+        self.volume_slider.setFixedWidth(100)
 
         controls_widget = QWidget()
         controls_widget.setObjectName("videoControls")
@@ -83,7 +95,7 @@ class VideoPlayer(QWidget):
         controls.addWidget(self.play_button)
         controls.addWidget(self.position_slider, 1)
         controls.addWidget(self.time_label)
-        controls.addWidget(QLabel("音量"))
+        controls.addWidget(vol_icon_label)
         controls.addWidget(self.volume_slider)
 
         layout = QVBoxLayout(self)
@@ -147,7 +159,7 @@ class VideoPlayer(QWidget):
             return False
         if result == -1:
             return False
-        self.play_button.setText("Ⅱ")
+        self.play_button.setIcon(self._icon_pause)
         self._timer.start()
         return True
 
@@ -157,10 +169,10 @@ class VideoPlayer(QWidget):
         with self._lock:
             if self._player.is_playing():
                 self._player.pause()
-                self.play_button.setText("▶")
+                self.play_button.setIcon(self._icon_play)
             else:
                 self._player.play()
-                self.play_button.setText("Ⅱ")
+                self.play_button.setIcon(self._icon_pause)
                 self._timer.start()
 
     def _reset_controls(self) -> None:
@@ -168,7 +180,7 @@ class VideoPlayer(QWidget):
         self._length_ms = 0
         self.position_slider.setValue(0)
         self.time_label.setText("0:00 / 0:00")
-        self.play_button.setText("▶")
+        self.play_button.setIcon(self._icon_play)
 
     def stop(self) -> None:
         self._reset_controls()
