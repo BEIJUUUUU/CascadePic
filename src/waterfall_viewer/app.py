@@ -43,18 +43,57 @@ def _apply_stylesheet(app: QApplication) -> None:
 
 def _parse_args(
     argv: list[str],
-) -> tuple[str | None, list[str]]:
+) -> tuple[str | None, list[str], str | None]:
     smoke_path: str | None = None
+    action: str | None = None
     media_args: list[str] = []
     index = 0
     while index < len(argv):
-        if argv[index] == "--smoke" and index + 1 < len(argv):
+        token = argv[index]
+        if token == "--smoke" and index + 1 < len(argv):
             smoke_path = argv[index + 1]
             index += 2
-        else:
-            media_args.append(argv[index])
+        elif token in ("--install-context-menu", "--install-shell"):
+            action = "install"
             index += 1
-    return smoke_path, media_args
+        elif token in ("--uninstall-context-menu", "--uninstall-shell"):
+            action = "uninstall"
+            index += 1
+        else:
+            media_args.append(token)
+            index += 1
+    return smoke_path, media_args, action
+
+
+def _run_shell_action(app: QApplication, action: str) -> int:
+    """Install or remove the Explorer context menu and report the result."""
+    from PySide6.QtWidgets import QMessageBox
+
+    from waterfall_viewer.services.shell_integration import install, uninstall
+
+    try:
+        if action == "install":
+            count = install()
+            QMessageBox.information(
+                None,
+                "流瀑看图",
+                "右键菜单安装完成。\n\n"
+                "现在可以在文件夹、文件夹空白处或图片/视频上点右键，\n"
+                "选择「用流瀑看图打开」。\n\n"
+                f"已写入 {count} 处注册项（不需要管理员权限）。",
+            )
+        else:
+            count = uninstall()
+            QMessageBox.information(
+                None,
+                "流瀑看图",
+                f"右键菜单已卸载，共清理 {count} 处注册项。",
+            )
+    except Exception as error:  # noqa: BLE001 - surface any failure to the user
+        QMessageBox.warning(None, "流瀑看图", f"操作失败：\n{error}")
+        return 1
+    app.quit()
+    return 0
 
 
 def _write_smoke_report(smoke_path: str) -> None:
@@ -88,7 +127,11 @@ def main() -> int:
     _apply_palette(app)
     _apply_stylesheet(app)
 
-    smoke_path, media_args = _parse_args(sys.argv[1:])
+    smoke_path, media_args, shell_action = _parse_args(sys.argv[1:])
+
+    if shell_action is not None:
+        return _run_shell_action(app, shell_action)
+
     window = MainWindow()
     if media_args:
         window.open_input(Path(media_args[0]))

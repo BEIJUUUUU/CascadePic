@@ -26,6 +26,15 @@ from waterfall_viewer.services.media_catalog import (
     is_supported_video,
 )
 from waterfall_viewer.services.media_sort import SortMode, sort_media_items
+from waterfall_viewer.services.shell_integration import (
+    install as install_context_menu,
+)
+from waterfall_viewer.services.shell_integration import (
+    is_context_menu_installed,
+)
+from waterfall_viewer.services.shell_integration import (
+    uninstall as uninstall_context_menu,
+)
 from waterfall_viewer.ui.image_canvas import ImageCanvas
 from waterfall_viewer.ui.video_player import VideoPlayer
 from waterfall_viewer.ui.waterfall_view import WaterfallView
@@ -62,7 +71,9 @@ class MainWindow(QMainWindow):
         self._movie_first_frame = True
 
         self.setWindowTitle("CascadePic 流瀑看图")
-        self.setWindowIcon(QIcon(str(Path(__file__).parent.parent / "resources" / "icons" / "app_logo.png")))
+        self.setWindowIcon(
+            QIcon(str(Path(__file__).parent.parent / "resources" / "icons" / "app_logo.png"))
+        )
         self.resize(1200, 800)
 
         self.canvas = ImageCanvas()
@@ -170,6 +181,14 @@ class MainWindow(QMainWindow):
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         toolbar.addWidget(spacer)
+
+        self._context_menu_action = QAction("右键集成", self)
+        self._context_menu_action.setIcon(self._icon("context_menu"))
+        self._context_menu_action.setCheckable(True)
+        self._context_menu_action.setChecked(is_context_menu_installed())
+        self._update_context_menu_tooltip()
+        self._context_menu_action.triggered.connect(self._toggle_context_menu)
+        toolbar.addAction(self._context_menu_action)
 
         previous_action = QAction("上一张", self)
         previous_action.setIcon(self._icon("previous"))
@@ -314,6 +333,25 @@ class MainWindow(QMainWindow):
         self._scan_workers.pop(generation, None)
         self._scan_selections.pop(generation, None)
         self._scan_folders.pop(generation, None)
+
+    def _toggle_context_menu(self, checked: bool) -> None:
+        try:
+            if checked:
+                count = install_context_menu()
+                self._status_label.setText(f"已启用资源管理器右键菜单（{count} 处注册项）")
+            else:
+                count = uninstall_context_menu()
+                self._status_label.setText(f"已移除资源管理器右键菜单（{count} 处注册项）")
+        except Exception as error:  # noqa: BLE001 - report any failure to the user
+            self._context_menu_action.setChecked(not checked)
+            self._show_error(f"右键菜单操作失败：\n{error}")
+        self._update_context_menu_tooltip()
+
+    def _update_context_menu_tooltip(self) -> None:
+        if self._context_menu_action.isChecked():
+            self._context_menu_action.setToolTip("资源管理器右键菜单：已启用（点击移除）")
+        else:
+            self._context_menu_action.setToolTip("资源管理器右键菜单：已关闭（点击启用）")
 
     def open_path(self, path: Path) -> bool:
         path = path.expanduser().resolve()

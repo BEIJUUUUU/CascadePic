@@ -61,9 +61,15 @@ class VideoPlayer(QWidget):
         self.video_surface.setAttribute(Qt.WidgetAttribute.WA_NativeWindow, True)
         self.video_surface.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.video_surface.installEventFilter(self)
-        self._icon_play = QIcon(str(Path(__file__).parent.parent / "resources" / "icons" / "play.svg"))
-        self._icon_pause = QIcon(str(Path(__file__).parent.parent / "resources" / "icons" / "pause.svg"))
-        self._icon_volume = QIcon(str(Path(__file__).parent.parent / "resources" / "icons" / "volume.svg"))
+        self._icon_play = QIcon(
+            str(Path(__file__).parent.parent / "resources" / "icons" / "play.svg")
+        )
+        self._icon_pause = QIcon(
+            str(Path(__file__).parent.parent / "resources" / "icons" / "pause.svg")
+        )
+        self._icon_volume = QIcon(
+            str(Path(__file__).parent.parent / "resources" / "icons" / "volume.svg")
+        )
 
         self.play_button = QPushButton()
         self.play_button.setObjectName("playButton")

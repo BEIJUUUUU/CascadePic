@@ -65,11 +65,17 @@ def probe_video(
                 stream = payload.get("streams", [{}])[0]
                 width = int(stream.get("width", 0))
                 height = int(stream.get("height", 0))
-                duration_ms = max(0, round(float(payload.get("format", {}).get("duration", 0)) * 1000))
-                if width > 0 and height > 0:
-                    return VideoMetadata(width=width, height=height, duration_ms=duration_ms)
             except (ValueError, TypeError, IndexError, json.JSONDecodeError):
-                pass
+                width = height = 0
+            if width > 0 and height > 0:
+                # Duration may legitimately be "N/A" for live or still-encoding
+                # streams; keep the resolution even when it is unavailable.
+                try:
+                    raw_duration = payload.get("format", {}).get("duration", 0)
+                    duration_ms = max(0, round(float(raw_duration) * 1000))
+                except (ValueError, TypeError):
+                    duration_ms = 0
+                return VideoMetadata(width=width, height=height, duration_ms=duration_ms)
 
     # 2. Fallback to ffmpeg -i info header (allows omitting the ~80MB ffprobe binary!)
     ffmpeg_bin = find_ffmpeg()
@@ -80,7 +86,7 @@ def probe_video(
     if result is None:
         return None
     info = (result.stderr or result.stdout).decode("utf-8", errors="replace")
-    
+
     # Parse Duration: HH:MM:SS.ms
     dur_match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", info)
     duration_ms = 0

@@ -5,11 +5,18 @@ def test_parse_args_separates_smoke_and_media() -> None:
     assert app._parse_args(["folder", "--smoke", "out.png", "extra"]) == (
         "out.png",
         ["folder", "extra"],
+        None,
     )
 
 
 def test_parse_args_accepts_plain_media_path() -> None:
-    assert app._parse_args([r"D:\pics"]) == (None, [r"D:\pics"])
+    assert app._parse_args([r"D:\pics"]) == (None, [r"D:\pics"], None)
+
+
+def test_parse_args_detects_context_menu_actions() -> None:
+    assert app._parse_args(["--install-context-menu"]) == (None, [], "install")
+    assert app._parse_args(["--uninstall-context-menu"]) == (None, [], "uninstall")
+    assert app._parse_args(["--install-shell", "folder"]) == (None, ["folder"], "install")
 
 
 def test_frozen_runtime_points_vlc_at_bundled_library(tmp_path, monkeypatch) -> None:

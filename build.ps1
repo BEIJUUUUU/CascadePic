@@ -1,4 +1,4 @@
-# Build a distributable CascadePic folder with PyInstaller.
+﻿# Build a distributable CascadePic folder with PyInstaller.
 #
 # Usage:
 #   .\build.ps1
@@ -81,7 +81,19 @@ if ($Ffprobe -and (Test-Path $Ffprobe) -and ($args -contains "-IncludeFfprobe"))
     Copy-Item $Ffprobe (Join-Path $dist "ffprobe.exe") -Force
 }
 
+# --- Explorer context menu helpers --------------------------------------
+$contextSource = Join-Path $root "packaging\context_menu"
+if (Test-Path $contextSource) {
+    Write-Host "== Bundling Explorer context menu scripts =="
+    $contextTarget = Join-Path $dist "context_menu"
+    New-Item -ItemType Directory -Path $contextTarget -Force | Out-Null
+    Copy-Item (Join-Path $contextSource "*.ps1") $contextTarget -Force
+    Copy-Item (Join-Path $root "安装右键菜单.cmd") $dist -Force -ErrorAction SilentlyContinue
+    Copy-Item (Join-Path $root "卸载右键菜单.cmd") $dist -Force -ErrorAction SilentlyContinue
+}
+
 $size = (Get-ChildItem $dist -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
 Write-Host ""
 Write-Host "Build complete: $dist" -ForegroundColor Green
 Write-Host ("Total size: {0:N0} MB" -f $size)
+Write-Host "提示：双击 dist\CascadePic\安装右键菜单.cmd 可启用资源管理器右键集成。" -ForegroundColor Cyan
