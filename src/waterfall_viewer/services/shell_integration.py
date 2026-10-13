@@ -13,6 +13,11 @@ VERB_KEY = "CascadePic"
 VERB_LABEL = "用流瀑看图打开"
 FRIENDLY_NAME = "CascadePic 流瀑看图"
 
+# Folder locations use their own label so the menu entry states the folder
+# semantics explicitly instead of reusing the generic media wording.
+FOLDER_VERB_KEY = "CascadePicFolder"
+FOLDER_VERB_LABEL = "用流瀑看图浏览此文件夹"
+
 MEDIA_EXTENSIONS = (
     ".jpg",
     ".jpeg",
@@ -33,35 +38,40 @@ MEDIA_EXTENSIONS = (
     ".m4v",
 )
 
-# Locations that receive the "open with CascadePic" verb. Each entry pairs a
-# registry base key with the shell argument token that resolves to the target.
+# Folder locations get the folder-specific verb key and label; media files
+# keep the generic media entry.
 _MENU_LOCATIONS = (
     # Right-click on a folder icon.
-    (r"Software\Classes\Directory\shell", "%1"),
+    (r"Software\Classes\Directory\shell", "%1", FOLDER_VERB_KEY, FOLDER_VERB_LABEL),
     # Right-click on empty space inside a folder window.
-    (r"Software\Classes\Directory\Background\shell", "%V"),
+    (r"Software\Classes\Directory\Background\shell", "%V", FOLDER_VERB_KEY, FOLDER_VERB_LABEL),
     # Right-click on empty space on the desktop.
-    (r"Software\Classes\DesktopBackground\shell", "%V"),
+    (r"Software\Classes\DesktopBackground\shell", "%V", FOLDER_VERB_KEY, FOLDER_VERB_LABEL),
     # Right-click on a drive letter in "This PC".
-    (r"Software\Classes\Drive\shell", "%1"),
+    (r"Software\Classes\Drive\shell", "%1", FOLDER_VERB_KEY, FOLDER_VERB_LABEL),
 )
 
 _APPLICATION_KEY = r"Software\Classes\Applications\CascadePic.exe"
 
 
 def is_context_menu_installed() -> bool:
-    """True when the CascadePic verb is currently registered for folders."""
+    """True when either CascadePic verb is currently registered for folders."""
     if not sys.platform.startswith("win"):
         return False
     try:
         import winreg
 
-        with winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            rf"Software\Classes\Directory\shell\{VERB_KEY}\command",
-        ):
-            return True
-    except OSError:
+        for verb in (VERB_KEY, FOLDER_VERB_KEY):
+            try:
+                with winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER,
+                    rf"Software\Classes\Directory\shell\{verb}\command",
+                ):
+                    return True
+            except OSError:
+                continue
+        return False
+    except ImportError:
         return False
 
 
@@ -112,7 +122,7 @@ def _refresh_explorer() -> None:
 
 
 def _menu_keys() -> list[str]:
-    keys = [base for base, _ in _MENU_LOCATIONS]
+    keys = [base for base, _, _, _ in _MENU_LOCATIONS]
     keys.extend(rf"Software\Classes\SystemFileAssociations\{ext}\shell" for ext in MEDIA_EXTENSIONS)
     return keys
 
@@ -131,22 +141,25 @@ def install(exe_path: Path | None = None) -> int:
 
     created = 0
 
-    def write_verb(base_key: str, argument: str) -> None:
+    def write_verb(
+        base_key: str, argument: str, verb_key: str = VERB_KEY, label: str = VERB_LABEL
+    ) -> None:
         nonlocal created
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"{base_key}\{VERB_KEY}") as key:
-            winreg.SetValueEx(key, "", 0, winreg.REG_SZ, VERB_LABEL)
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"{base_key}\{verb_key}") as key:
+            winreg.SetValueEx(key, "", 0, winreg.REG_SZ, label)
             winreg.SetValueEx(key, "Icon", 0, winreg.REG_SZ, f"{exe_text},0")
             # Multi-select opens a single window instead of one per file.
             winreg.SetValueEx(key, "MultiSelectModel", 0, winreg.REG_SZ, "Single")
         with winreg.CreateKey(
-            winreg.HKEY_CURRENT_USER, rf"{base_key}\{VERB_KEY}\command"
+            winreg.HKEY_CURRENT_USER, rf"{base_key}\{verb_key}\command"
         ) as command:
             winreg.SetValueEx(command, "", 0, winreg.REG_SZ, f'"{exe_text}" "{argument}"')
         created += 1
 
-    # Folders, folder background, desktop background and drives.
-    for base_key, argument in _MENU_LOCATIONS:
-        write_verb(base_key, argument)
+    # Folders, folder background, desktop background and drives: each entry
+    # names the folder action explicitly so it reads as "browse this folder".
+    for base_key, argument, verb_key, label in _MENU_LOCATIONS:
+        write_verb(base_key, argument, verb_key, label)
 
     # Media files. Registered in two layers:
     #   * SystemFileAssociations\<ext>\shell — always exists, but Explorer can
@@ -253,7 +266,10 @@ def uninstall() -> int:
                 return False
 
     for base in _menu_keys():
+        # Both verb keys: folders use CascadePicFolder, files use CascadePic.
         if delete_tree(rf"{base}\{VERB_KEY}"):
+            removed += 1
+        if delete_tree(rf"{base}\{FOLDER_VERB_KEY}"):
             removed += 1
 
     # ProgID-layer verbs (same layer install() writes).
