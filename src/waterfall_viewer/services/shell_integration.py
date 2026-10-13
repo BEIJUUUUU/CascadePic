@@ -77,37 +77,22 @@ def resolve_executable() -> Path:
     return Path(sys.executable).resolve()
 
 
-def _notify_shell() -> None:
-    """Ask Explorer to refresh its context menu cache."""
-    if not sys.platform.startswith("win"):
-        return
-    try:
-        import ctypes
-
-        ctypes.windll.shell32.SHChangeNotify(0x08000000, 0x0000, None, None)
-    except Exception:
-        pass
-
-
-def _menu_keys() -> list[str]:
-    keys = [base for base, _ in _MENU_LOCATIONS]
-    keys.extend(rf"Software\Classes\SystemFileAssociations\{ext}\shell" for ext in MEDIA_EXTENSIONS)
-    return keys
-
-
 def _refresh_explorer() -> None:
-    """Make Explorer pick up the change immediately.
+    """Make Explorer pick up a change immediately.
 
-    SHChangeNotify alone does not always invalidate the context-menu cache for
-    newly added verb keys, so also broadcast a global setting-changed message.
+    ``SHChangeNotify`` alone does not reliably invalidate the context-menu cache
+    for newly added verb keys, so also broadcast a global setting-changed
+    message that running Explorer windows react to.
     """
     if not sys.platform.startswith("win"):
         return
-    try:
-        import ctypes
+    import contextlib
+    import ctypes
 
+    with contextlib.suppress(Exception):
         # SHCNE_ASSOCCHANGED: associations changed.
         ctypes.windll.shell32.SHChangeNotify(0x08000000, 0x0000, None, None)
+    with contextlib.suppress(Exception):
         # WM_SETTINGCHANGE broadcast, picked up by running Explorer windows.
         HWND_BROADCAST = 0xFFFF
         WM_SETTINGCHANGE = 0x001A
@@ -122,8 +107,12 @@ def _refresh_explorer() -> None:
             2000,
             ctypes.byref(result),
         )
-    except Exception:
-        pass
+
+
+def _menu_keys() -> list[str]:
+    keys = [base for base, _ in _MENU_LOCATIONS]
+    keys.extend(rf"Software\Classes\SystemFileAssociations\{ext}\shell" for ext in MEDIA_EXTENSIONS)
+    return keys
 
 
 def install(exe_path: Path | None = None) -> int:
@@ -173,7 +162,6 @@ def install(exe_path: Path | None = None) -> int:
             winreg.SetValueEx(types, extension, 0, winreg.REG_SZ, "")
     created += 1
 
-    _notify_shell()
     _refresh_explorer()
     return created
 
@@ -221,6 +209,5 @@ def uninstall() -> int:
     if delete_tree(_APPLICATION_KEY):
         removed += 1
 
-    _notify_shell()
     _refresh_explorer()
     return removed
