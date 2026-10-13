@@ -77,7 +77,7 @@ jobs:
         shell: pwsh
         run: ./build.ps1
 
-      - name: Verify executable exists
+      - name: Verify build output
         shell: pwsh
         run: |
           $exe = "dist/CascadePic/CascadePic.exe"
@@ -85,10 +85,18 @@ jobs:
             Write-Error "Expected $exe to be produced by the build."
             exit 1
           }
-          Write-Host "Built: $exe"
           $size = (Get-ChildItem dist/CascadePic -Recurse -File |
             Measure-Object -Property Length -Sum).Sum / 1MB
+          Write-Host ("Built: {0}" -f $exe)
           Write-Host ("Bundle size: {0:N0} MB" -f $size)
+          # CI runners have no VLC/ffmpeg, so warn rather than fail on those.
+          if (-not (Test-Path "dist/CascadePic/libvlc.dll")) {
+            Write-Warning "libvlc.dll absent (expected on CI; bundled in release builds)."
+          }
+          if (-not (Test-Path "dist/CascadePic/context_menu")) {
+            Write-Error "Context menu scripts were not bundled."
+            exit 1
+          }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

@@ -10,18 +10,25 @@
 param(
     [string]$VlcDir = "",
     [string]$Ffmpeg = "",
-    [string]$Ffprobe = ""
+    [string]$Ffprobe = "",
+    [switch]$IncludeFfprobe
 )
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
 
+# Prefer the project virtual environment, but fall back to the interpreter
+# running this script so the build also works on CI runners.
 $py = Join-Path $root ".venv\Scripts\python.exe"
 if (-not (Test-Path $py)) {
-    Write-Error "Virtual environment not found at $py. Run: py -3.12 -m venv .venv"
+    $py = (Get-Command python -ErrorAction SilentlyContinue).Source
+}
+if (-not $py -or -not (Test-Path $py)) {
+    Write-Error "No Python interpreter found. Run: py -3.12 -m venv .venv"
     exit 1
 }
+Write-Host "== Using interpreter: $py =="
 
 Write-Host "== Installing build tooling =="
 & $py -m pip install --quiet pyinstaller
@@ -75,8 +82,9 @@ if ($Ffmpeg -and (Test-Path $Ffmpeg)) {
 } else {
     Write-Warning "ffmpeg was not found. Video thumbnails will be disabled in this build."
 }
-# Note: ffprobe is now optional and omitted from default distribution because ffmpeg handles metadata directly (-77MB saving!)
-if ($Ffprobe -and (Test-Path $Ffprobe) -and ($args -contains "-IncludeFfprobe")) {
+# ffprobe is optional: ffmpeg already provides metadata, so it is omitted by
+# default (saves ~77 MB). Opt in with -IncludeFfprobe.
+if ($IncludeFfprobe -and $Ffprobe -and (Test-Path $Ffprobe)) {
     Write-Host "== Bundling ffprobe =="
     Copy-Item $Ffprobe (Join-Path $dist "ffprobe.exe") -Force
 }
