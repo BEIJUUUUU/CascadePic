@@ -20,25 +20,38 @@ except (ImportError, OSError):
     vlc = None
 
 
-class _StopJob(QRunnable):
-    """Call the blocking VLC stop outside the UI thread."""
+class _StopState:
+    """Mutable flag shared with a stop job.
 
-    def __init__(self, player: Any, lock: threading.Lock, on_done: Any) -> None:
+    Kept as its own object so the job never holds a reference back to the
+    widget, which would create a reference cycle through the thread pool.
+    """
+
+    __slots__ = ("stopping",)
+
+    def __init__(self) -> None:
+        self.stopping = False
+
+
+class _StopJob(QRunnable):
+    """Call the blocking VLC stop outside the UI thread.
+
+    Holds only the player, the lock and a plain state object: the widget may be
+    destroyed while this job is still queued, and touching it from a worker
+    thread would raise or, worse, crash the interpreter.
+    """
+
+    def __init__(self, player: Any, lock: threading.Lock, state: _StopState) -> None:
         super().__init__()
         self._player = player
-        # Hold the lock and the completion callback directly instead of a
-        # reference to the widget: the widget may be destroyed while this job
-        # is still queued, and touching it from a worker thread would raise.
         self._lock = lock
-        self._on_done = on_done
+        self._state = state
 
     @Slot()
     def run(self) -> None:
         with suppress(Exception), self._lock:
             self._player.stop()
-        # The owner widget may be deleted while this job is in flight.
-        with suppress(RuntimeError):
-            self._on_done()
+        self._state.stopping = False
 
 
 class VideoPlayer(QWidget):
@@ -53,9 +66,12 @@ class VideoPlayer(QWidget):
         self._player = None
         self._seeking = False
         self._length_ms = 0
-        self._stopping = False
+        self._stop_state = _StopState()
         self._lock = threading.Lock()
-        self._pool = QThreadPool(self)
+        # A process-wide pool: giving the widget its own QThreadPool ties the
+        # pool's lifetime to the widget, and destroying it while a stop job is
+        # still running crashes inside Qt's thread cleanup.
+        self._pool = QThreadPool.globalInstance()
 
         self.setObjectName("videoPlayer")
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -194,13 +210,10 @@ class VideoPlayer(QWidget):
 
     def stop(self) -> None:
         self._reset_controls()
-        if self._player is None or self._stopping:
+        if self._player is None or self._stop_state.stopping:
             return
-        self._stopping = True
-        self._pool.start(_StopJob(self._player, self._lock, self._stop_job_finished))
-
-    def _stop_job_finished(self) -> None:
-        self._stopping = False
+        self._stop_state.stopping = True
+        self._pool.start(_StopJob(self._player, self._lock, self._stop_state))
 
     def shutdown(self) -> None:
         """Release native resources and detach the event filter before teardown.

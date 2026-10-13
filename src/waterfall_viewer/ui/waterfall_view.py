@@ -58,8 +58,9 @@ class WaterfallView(QAbstractScrollArea):
         self._thumbnail_sizes: dict[ThumbnailKey, int] = {}
         self._failed: set[ThumbnailKey] = set()
         self._workers: dict[WorkerKey, ThumbnailWorker] = {}
-        self._thread_pool = QThreadPool(self)
-        self._thread_pool.setMaxThreadCount(4)
+        # Process-wide pool: a widget-owned pool is destroyed with the widget,
+        # which crashes if workers are still running at that moment.
+        self._thread_pool = QThreadPool.globalInstance()
 
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -128,6 +129,14 @@ class WaterfallView(QAbstractScrollArea):
 
     def item_rect(self, index: int) -> QRectF:
         return QRectF(self._rects[index])
+
+    def cancel_pending_thumbnails(self) -> None:
+        """Cancel queued thumbnail work so nothing reports back after teardown."""
+        self._generation += 1
+        for worker_key, worker in list(self._workers.items()):
+            worker.cancel()
+            if self._thread_pool.tryTake(worker):
+                self._workers.pop(worker_key, None)
 
     def _reset_thumbnail_requests(self) -> None:
         self._generation += 1

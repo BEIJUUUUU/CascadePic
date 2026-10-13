@@ -57,10 +57,12 @@ class MainWindow(QMainWindow):
         self._scan_workers: dict[int, FolderScanWorker] = {}
         self._scan_selections: dict[int, Path | None] = {}
         self._scan_folders: dict[int, Path] = {}
-        self._thread_pool = QThreadPool(self)
-        self._thread_pool.setMaxThreadCount(2)
-        self._image_pool = QThreadPool(self)
-        self._image_pool.setMaxThreadCount(2)
+        # Pools are process-wide on purpose: a QThreadPool owned by the window
+        # is destroyed together with it, and destroying a pool that still has a
+        # running worker crashes inside Qt's thread cleanup. Cancellation plus
+        # the bounded drain in closeEvent keeps shutdown tidy instead.
+        self._thread_pool = QThreadPool.globalInstance()
+        self._image_pool = QThreadPool.globalInstance()
         self._image_load_generation = 0
         self._pending_image_path: Path | None = None
         self._image_workers: dict[int, ImageLoadWorker] = {}
@@ -672,8 +674,12 @@ class MainWindow(QMainWindow):
         for worker in self._scan_workers.values():
             worker.cancel()
         self._cancel_image_loads()
+        self.waterfall.cancel_pending_thumbnails()
         self._stop_movie()
         self.video_player.shutdown()
+        # Let in-flight jobs observe their cancellation before the widgets they
+        # report to are destroyed. Bounded so a stuck decode cannot hang exit.
+        QThreadPool.globalInstance().waitForDone(3000)
         super().closeEvent(event)
 
     def _show_error(self, message: str) -> None:
