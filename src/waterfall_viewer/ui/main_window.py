@@ -8,6 +8,7 @@ from PySide6.QtGui import QAction, QCloseEvent, QIcon, QImage, QKeySequence, QMo
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
+    QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
@@ -124,64 +125,80 @@ class MainWindow(QMainWindow):
         path = Path(__file__).parent.parent / "resources" / "icons" / f"{name}.svg"
         return QIcon(str(path))
 
+    def _chip(self, *widgets: QWidget) -> QWidget:
+        """Group related controls on a rounded tinted background."""
+        container = QWidget()
+        container.setObjectName("toolbarChip")
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(10, 4, 8, 4)
+        layout.setSpacing(8)
+        for widget in widgets:
+            layout.addWidget(widget)
+        return container
+
+    def _label(self, text: str) -> QLabel:
+        label = QLabel(text)
+        label.setObjectName("toolbarLabel")
+        return label
+
     def _create_toolbar(self) -> None:
         toolbar = QToolBar("浏览工具", self)
         toolbar.setObjectName("mainToolbar")
         toolbar.setMovable(False)
-        toolbar.setIconSize(QSize(21, 21))
-        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        toolbar.setFloatable(False)
+        toolbar.setIconSize(QSize(20, 20))
+        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.addToolBar(toolbar)
 
+        # --- Primary actions: labelled, because they start the workflow ---
         open_action = QAction("打开媒体", self)
         open_action.setIcon(self._icon("image_open"))
-        open_action.setToolTip("打开媒体  Ctrl+O")
+        open_action.setToolTip("打开媒体文件  Ctrl+O")
         open_action.setShortcut(QKeySequence.StandardKey.Open)
         open_action.triggered.connect(self.choose_image)
         toolbar.addAction(open_action)
 
         folder_action = QAction("打开文件夹", self)
         folder_action.setIcon(self._icon("folder_open"))
-        folder_action.setToolTip("打开文件夹  Ctrl+Shift+O")
+        folder_action.setToolTip("打开整个文件夹  Ctrl+Shift+O")
         folder_action.setShortcut("Ctrl+Shift+O")
         folder_action.triggered.connect(self.choose_folder)
         toolbar.addAction(folder_action)
 
         toolbar.addSeparator()
 
-        sort_label = QLabel("排序")
-        sort_label.setObjectName("toolbarLabel")
-        toolbar.addWidget(sort_label)
+        # --- Sort order ---
         self._sort_combo = QComboBox()
-        self._sort_combo.addItem("名称（文件夹默认）", SortMode.NAME)
-        self._sort_combo.addItem("修改时间（新→旧）", SortMode.MODIFIED)
-        self._sort_combo.addItem("创建时间（新→旧）", SortMode.CREATED)
+        self._sort_combo.addItem("名称", SortMode.NAME)
+        self._sort_combo.addItem("修改时间", SortMode.MODIFIED)
+        self._sort_combo.addItem("创建时间", SortMode.CREATED)
+        self._sort_combo.setToolTip("排序方式（与资源管理器一致）")
         self._sort_combo.currentIndexChanged.connect(self._apply_current_sort)
-        toolbar.addWidget(self._sort_combo)
+        # QToolBar lays widgets out through the QAction returned by addWidget,
+        # so visibility must be toggled on that action, not on the widget.
+        self._waterfall_only: list[QAction] = []
+        sort_chip = self._chip(self._label("排序"), self._sort_combo)
+        self._waterfall_only.append(toolbar.addWidget(sort_chip))
+        self._waterfall_only.append(toolbar.addSeparator())
 
-        toolbar.addSeparator()
-
-        thumbnail_label = QLabel("缩略图")
-        thumbnail_label.setObjectName("toolbarLabel")
-        toolbar.addWidget(thumbnail_label)
+        # --- Thumbnail size ---
         self._thumbnail_slider = QSlider(Qt.Orientation.Horizontal)
         self._thumbnail_slider.setRange(120, 480)
         self._thumbnail_slider.setSingleStep(20)
         self._thumbnail_slider.setPageStep(40)
-        self._thumbnail_slider.setValue(220)
-        self._thumbnail_slider.setFixedWidth(130)
+        self._thumbnail_slider.setValue(232)
+        self._thumbnail_slider.setFixedWidth(118)
+        self._thumbnail_slider.setToolTip("缩略图大小")
         self._thumbnail_slider.valueChanged.connect(self.waterfall.set_thumbnail_width)
-        toolbar.addWidget(self._thumbnail_slider)
-
-        clear_cache_action = QAction("清缓存", self)
-        clear_cache_action.setIcon(self._icon("delete"))
-        clear_cache_action.setToolTip("清理缩略图缓存")
-        clear_cache_action.triggered.connect(self.clear_thumbnail_cache)
-        toolbar.addAction(clear_cache_action)
+        self._waterfall_only.append(
+            toolbar.addWidget(self._chip(self._label("大小"), self._thumbnail_slider))
+        )
 
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         toolbar.addWidget(spacer)
 
+        # --- Shell integration toggle (always available) ---
         self._context_menu_action = QAction("右键集成", self)
         self._context_menu_action.setIcon(self._icon("context_menu"))
         self._context_menu_action.setCheckable(True)
@@ -190,12 +207,24 @@ class MainWindow(QMainWindow):
         self._context_menu_action.triggered.connect(self._toggle_context_menu)
         toolbar.addAction(self._context_menu_action)
 
+        clear_cache_action = QAction("清缓存", self)
+        clear_cache_action.setIcon(self._icon("delete"))
+        clear_cache_action.setToolTip("清理缩略图与内存缓存")
+        clear_cache_action.triggered.connect(self.clear_thumbnail_cache)
+        toolbar.addAction(clear_cache_action)
+
+        # --- Viewer-only controls, hidden on the waterfall page ---
+        self._viewer_separator = toolbar.addSeparator()
+
+        self._viewer_actions: list[QAction] = []
+
         previous_action = QAction("上一张", self)
         previous_action.setIcon(self._icon("previous"))
         previous_action.setToolTip("上一张  ← / 滚轮向上")
         previous_action.setShortcut(Qt.Key.Key_Left)
         previous_action.triggered.connect(self.show_previous)
         toolbar.addAction(previous_action)
+        self._viewer_actions.append(previous_action)
 
         next_action = QAction("下一张", self)
         next_action.setIcon(self._icon("next"))
@@ -203,29 +232,25 @@ class MainWindow(QMainWindow):
         next_action.setShortcut(Qt.Key.Key_Right)
         next_action.triggered.connect(self.show_next)
         toolbar.addAction(next_action)
+        self._viewer_actions.append(next_action)
 
         toolbar.addSeparator()
 
-        fit_action = QAction("适应窗口", self)
+        fit_action = QAction("适应", self)
         fit_action.setIcon(self._icon("fit"))
         fit_action.setToolTip("适应窗口  F")
         fit_action.setShortcut("F")
         fit_action.triggered.connect(self.canvas.fit_to_window)
         toolbar.addAction(fit_action)
+        self._viewer_actions.append(fit_action)
 
-        actual_action = QAction("原始大小", self)
+        actual_action = QAction("原始", self)
         actual_action.setIcon(self._icon("actual"))
-        actual_action.setToolTip("原始大小  1")
+        actual_action.setToolTip("原始像素大小  1")
         actual_action.setShortcut("1")
         actual_action.triggered.connect(self.canvas.actual_size)
         toolbar.addAction(actual_action)
-
-        zoom_in_action = QAction("放大", self)
-        zoom_in_action.setIcon(self._icon("zoom_in"))
-        zoom_in_action.setToolTip("放大  Ctrl++ / 右键+滚轮")
-        zoom_in_action.setShortcut(QKeySequence.StandardKey.ZoomIn)
-        zoom_in_action.triggered.connect(lambda: self.canvas.zoom(1.2))
-        toolbar.addAction(zoom_in_action)
+        self._viewer_actions.append(actual_action)
 
         zoom_out_action = QAction("缩小", self)
         zoom_out_action.setIcon(self._icon("zoom_out"))
@@ -233,6 +258,15 @@ class MainWindow(QMainWindow):
         zoom_out_action.setShortcut(QKeySequence.StandardKey.ZoomOut)
         zoom_out_action.triggered.connect(lambda: self.canvas.zoom(1 / 1.2))
         toolbar.addAction(zoom_out_action)
+        self._viewer_actions.append(zoom_out_action)
+
+        zoom_in_action = QAction("放大", self)
+        zoom_in_action.setIcon(self._icon("zoom_in"))
+        zoom_in_action.setToolTip("放大  Ctrl++ / 右键+滚轮")
+        zoom_in_action.setShortcut(QKeySequence.StandardKey.ZoomIn)
+        zoom_in_action.triggered.connect(lambda: self.canvas.zoom(1.2))
+        toolbar.addAction(zoom_in_action)
+        self._viewer_actions.append(zoom_in_action)
 
         fullscreen_action = QAction("全屏", self)
         fullscreen_action.setShortcut(Qt.Key.Key_F11)
@@ -243,6 +277,8 @@ class MainWindow(QMainWindow):
         close_viewer_action.setShortcut(Qt.Key.Key_Escape)
         close_viewer_action.triggered.connect(self.show_waterfall)
         self.addAction(close_viewer_action)
+
+        self._set_viewer_actions_visible(False)
 
     def choose_image(self) -> None:
         filters = (
@@ -541,11 +577,26 @@ class MainWindow(QMainWindow):
         self._update_viewer_controls()
         self._position_viewer_controls()
 
+    def _set_viewer_actions_visible(self, visible: bool) -> None:
+        """Swap toolbar between waterfall layout controls and viewer controls."""
+        for action in getattr(self, "_viewer_actions", []):
+            action.setVisible(visible)
+        separator = getattr(self, "_viewer_separator", None)
+        if separator is not None:
+            separator.setVisible(visible)
+        # Sort order and thumbnail size only affect the waterfall page.
+        for action in getattr(self, "_waterfall_only", []):
+            action.setVisible(not visible)
+        toolbar = self.findChild(QToolBar, "mainToolbar")
+        if toolbar is not None:
+            toolbar.updateGeometry()
+
     def _update_viewer_controls(self) -> None:
         if not hasattr(self, "_viewer_close_button"):
             return
         is_viewer = self._pages.currentWidget() is not self.waterfall
         self._viewer_close_button.setVisible(is_viewer)
+        self._set_viewer_actions_visible(is_viewer)
         show_navigation = is_viewer and len(self._images) > 1
         self._viewer_previous_button.setVisible(show_navigation)
         self._viewer_next_button.setVisible(show_navigation)

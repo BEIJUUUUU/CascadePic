@@ -33,11 +33,20 @@ MEDIA_EXTENSIONS = (
     ".m4v",
 )
 
-_BASE_KEYS = (
-    r"Software\Classes\Directory\shell",
-    r"Software\Classes\Directory\Background\shell",
-    r"Software\Classes\Applications\CascadePic.exe",
+# Locations that receive the "open with CascadePic" verb. Each entry pairs a
+# registry base key with the shell argument token that resolves to the target.
+_MENU_LOCATIONS = (
+    # Right-click on a folder icon.
+    (r"Software\Classes\Directory\shell", "%1"),
+    # Right-click on empty space inside a folder window.
+    (r"Software\Classes\Directory\Background\shell", "%V"),
+    # Right-click on empty space on the desktop.
+    (r"Software\Classes\DesktopBackground\shell", "%V"),
+    # Right-click on a drive letter in "This PC".
+    (r"Software\Classes\Drive\shell", "%1"),
 )
+
+_APPLICATION_KEY = r"Software\Classes\Applications\CascadePic.exe"
 
 
 def is_context_menu_installed() -> bool:
@@ -81,9 +90,40 @@ def _notify_shell() -> None:
 
 
 def _menu_keys() -> list[str]:
-    keys = list(_BASE_KEYS[:2])
+    keys = [base for base, _ in _MENU_LOCATIONS]
     keys.extend(rf"Software\Classes\SystemFileAssociations\{ext}\shell" for ext in MEDIA_EXTENSIONS)
     return keys
+
+
+def _refresh_explorer() -> None:
+    """Make Explorer pick up the change immediately.
+
+    SHChangeNotify alone does not always invalidate the context-menu cache for
+    newly added verb keys, so also broadcast a global setting-changed message.
+    """
+    if not sys.platform.startswith("win"):
+        return
+    try:
+        import ctypes
+
+        # SHCNE_ASSOCCHANGED: associations changed.
+        ctypes.windll.shell32.SHChangeNotify(0x08000000, 0x0000, None, None)
+        # WM_SETTINGCHANGE broadcast, picked up by running Explorer windows.
+        HWND_BROADCAST = 0xFFFF
+        WM_SETTINGCHANGE = 0x001A
+        SMTO_ABORTIFHUNG = 0x0002
+        result = ctypes.c_long()
+        ctypes.windll.user32.SendMessageTimeoutW(
+            HWND_BROADCAST,
+            WM_SETTINGCHANGE,
+            0,
+            ctypes.c_wchar_p("Shell"),
+            SMTO_ABORTIFHUNG,
+            2000,
+            ctypes.byref(result),
+        )
+    except Exception:
+        pass
 
 
 def install(exe_path: Path | None = None) -> int:
@@ -113,16 +153,16 @@ def install(exe_path: Path | None = None) -> int:
             winreg.SetValueEx(command, "", 0, winreg.REG_SZ, f'"{exe_text}" "{argument}"')
         created += 1
 
-    # Selected folder and empty folder background.
-    write_verb(r"Software\Classes\Directory\shell", "%1")
-    write_verb(r"Software\Classes\Directory\Background\shell", "%V")
+    # Folders, folder background, desktop background and drives.
+    for base_key, argument in _MENU_LOCATIONS:
+        write_verb(base_key, argument)
 
     # Media files.
     for extension in MEDIA_EXTENSIONS:
         write_verb(rf"Software\Classes\SystemFileAssociations\{extension}\shell", "%1")
 
     # "Open with" candidate list.
-    app_key = r"Software\Classes\Applications\CascadePic.exe"
+    app_key = _APPLICATION_KEY
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"{app_key}\shell\open\command") as command:
         winreg.SetValueEx(command, "", 0, winreg.REG_SZ, f'"{exe_text}" "%1"')
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, app_key) as key:
@@ -134,6 +174,7 @@ def install(exe_path: Path | None = None) -> int:
     created += 1
 
     _notify_shell()
+    _refresh_explorer()
     return created
 
 
@@ -177,8 +218,9 @@ def uninstall() -> int:
         if delete_tree(rf"{base}\{VERB_KEY}"):
             removed += 1
 
-    if delete_tree(r"Software\Classes\Applications\CascadePic.exe"):
+    if delete_tree(_APPLICATION_KEY):
         removed += 1
 
     _notify_shell()
+    _refresh_explorer()
     return removed

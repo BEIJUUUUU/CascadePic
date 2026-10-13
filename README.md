@@ -7,6 +7,7 @@
 ### **流瀑看图 • 专为 Windows 打造的极速现代化媒体画廊**
 *A high-performance, minimalist Windows waterfall image & video viewer.*
 
+[![CI](https://github.com/BEIJUUUUU/CascadePic/actions/workflows/ci.yml/badge.svg)](https://github.com/BEIJUUUUU/CascadePic/actions/workflows/ci.yml)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D4?logo=windows&logoColor=white)](https://github.com/BEIJUUUUU/CascadePic)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://python.org)
 [![Qt](https://img.shields.io/badge/GUI-PySide6%20%2F%20Qt%206-41CD52?logo=qt&logoColor=white)](https://www.qt.io/)
@@ -44,7 +45,15 @@
 ## 📸 界面预览
 
 <div align="center">
-  <img src="docs/ui-preview-fluent.png" alt="CascadePic 流瀑看图界面预览" width="880"/>
+
+**瀑布流总览**
+
+<img src="docs/ui-waterfall.png" alt="CascadePic 瀑布流界面" width="880"/>
+
+**单图查看**
+
+<img src="docs/ui-viewer.png" alt="CascadePic 单图查看界面" width="880"/>
+
 </div>
 
 ---
@@ -71,12 +80,16 @@
 
 ### 覆盖的位置
 
-| 位置 | 效果 |
+| 右键位置 | 效果 |
 | :--- | :--- |
-| **文件夹上右键** | 直接以瀑布流打开该文件夹 |
-| **文件夹空白处右键** | 直接以瀑布流打开当前文件夹 |
-| **图片 / 视频文件上右键** | 打开该文件并自动定位到同目录瀑布流 |
+| **文件夹上** | 直接以瀑布流打开该文件夹 |
+| **文件夹空白处** | 直接以瀑布流打开当前文件夹 |
+| **桌面空白处** | 直接以瀑布流打开桌面 |
+| **磁盘盘符上** | 直接以瀑布流浏览该磁盘 |
+| **图片 / 视频文件上** | 打开该文件并自动定位到同目录瀑布流 |
 | **「打开方式」候选列表** | 出现在系统的“打开方式”列表中 |
+
+> 安装后如果菜单没有立刻出现，请关闭再打开一次资源管理器窗口，或运行 `taskkill /f /im explorer.exe & start explorer`。若菜单出现在「显示更多选项」里，这是 Windows 11 新版右键菜单的折叠机制，属于正常现象。
 
 支持的文件类型：`jpg` `jpeg` `jfif` `png` `bmp` `gif` `webp` `tif` `tiff` `ico` `mp4` `mkv` `webm` `mov` `avi` `wmv` `m4v`
 

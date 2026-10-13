@@ -23,15 +23,18 @@ def _configure_frozen_runtime() -> None:
 
 def _apply_palette(app: QApplication) -> None:
     palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor("#faf9f8"))
-    palette.setColor(QPalette.ColorRole.WindowText, QColor("#1b1a19"))
+    palette.setColor(QPalette.ColorRole.Window, QColor("#f5f6f8"))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor("#14161a"))
     palette.setColor(QPalette.ColorRole.Base, QColor("#ffffff"))
-    palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#f3f2f1"))
-    palette.setColor(QPalette.ColorRole.Text, QColor("#1b1a19"))
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#f2f4f7"))
+    palette.setColor(QPalette.ColorRole.Text, QColor("#14161a"))
+    palette.setColor(QPalette.ColorRole.PlaceholderText, QColor("#9aa1ac"))
     palette.setColor(QPalette.ColorRole.Button, QColor("#ffffff"))
-    palette.setColor(QPalette.ColorRole.ButtonText, QColor("#1b1a19"))
-    palette.setColor(QPalette.ColorRole.Highlight, QColor("#0078d4"))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor("#14161a"))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor("#0a6cff"))
     palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor("#1f2329"))
+    palette.setColor(QPalette.ColorRole.ToolTipText, QColor("#ffffff"))
     app.setPalette(palette)
 
 

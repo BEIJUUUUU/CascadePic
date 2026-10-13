@@ -105,16 +105,24 @@ Write-Host "  [√] 已注册：文件夹右键菜单"
 
 # 2) 文件夹空白处右键
 New-MenuVerb -BaseKey "HKCU:\Software\Classes\Directory\Background\shell" -ArgumentToken "%V"
-Write-Host "  [√] 已注册：文件夹背景右键菜单"
+Write-Host "  [√] 已注册：文件夹空白处右键菜单"
 
-# 3) 常见图片 / 视频文件右键
+# 3) 桌面空白处右键
+New-MenuVerb -BaseKey "HKCU:\Software\Classes\DesktopBackground\shell" -ArgumentToken "%V"
+Write-Host "  [√] 已注册：桌面空白处右键菜单"
+
+# 4) 磁盘盘符右键
+New-MenuVerb -BaseKey "HKCU:\Software\Classes\Drive\shell" -ArgumentToken "%1"
+Write-Host "  [√] 已注册：磁盘盘符右键菜单"
+
+# 5) 常见图片 / 视频文件右键
 foreach ($extension in $MediaExtensions) {
     $baseKey = "HKCU:\Software\Classes\SystemFileAssociations\$extension\shell"
     New-MenuVerb -BaseKey $baseKey -ArgumentToken "%1"
 }
 Write-Host ("  [√] 已注册：{0} 种媒体文件右键菜单" -f $MediaExtensions.Count)
 
-# 4) “打开方式”候选程序
+# 6) “打开方式”候选程序
 New-Item -Path "$AppKey\shell\open\command" -Force | Out-Null
 Set-Item -Path "$AppKey\shell\open\command" -Value "`"$script:ResolvedExe`" `"%1`""
 New-ItemProperty -Path $AppKey -Name "FriendlyAppName" -Value $FriendlyName `
@@ -132,5 +140,6 @@ Update-ShellAssociations
 
 Write-Host ""
 Write-Host "右键菜单安装完成！" -ForegroundColor Green
-Write-Host "现在可以在文件夹或图片上点右键，选择「用流瀑看图打开」。"
+Write-Host "现在可以在文件夹、文件夹空白处、桌面空白处、磁盘盘符或图片上点右键，"
+Write-Host "选择「用流瀑看图打开」。"
 Write-Host "如需移除，请运行 卸载右键菜单.cmd"

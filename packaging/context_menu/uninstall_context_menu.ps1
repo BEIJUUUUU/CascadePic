@@ -31,6 +31,8 @@ function Remove-MenuVerb {
 $removed = 0
 if (Remove-MenuVerb -BaseKey "HKCU:\Software\Classes\Directory\shell") { $removed++ }
 if (Remove-MenuVerb -BaseKey "HKCU:\Software\Classes\Directory\Background\shell") { $removed++ }
+if (Remove-MenuVerb -BaseKey "HKCU:\Software\Classes\DesktopBackground\shell") { $removed++ }
+if (Remove-MenuVerb -BaseKey "HKCU:\Software\Classes\Drive\shell") { $removed++ }
 
 foreach ($extension in $MediaExtensions) {
     if (Remove-MenuVerb -BaseKey "HKCU:\Software\Classes\SystemFileAssociations\$extension\shell") {
@@ -43,11 +45,13 @@ if (Test-Path -LiteralPath $AppKey) {
     $removed++
 }
 
-# 清理可能产生的空壳键
+# 只清理我们可能创建、且现在确实为空的键（避免误删其他软件的数据）
 foreach ($baseKey in @(
     "HKCU:\Software\Classes\Directory\Background\shell",
     "HKCU:\Software\Classes\Directory\Background",
     "HKCU:\Software\Classes\Directory\shell",
+    "HKCU:\Software\Classes\DesktopBackground\shell",
+    "HKCU:\Software\Classes\DesktopBackground",
     "HKCU:\Software\Classes\Applications"
 )) {
     if (Test-Path -LiteralPath $baseKey) {

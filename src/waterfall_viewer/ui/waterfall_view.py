@@ -8,6 +8,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt, QThreadPool, Signal
 from PySide6.QtGui import (
     QColor,
     QImage,
+    QLinearGradient,
     QMouseEvent,
     QPainter,
     QPainterPath,
@@ -44,9 +45,9 @@ class WaterfallView(QAbstractScrollArea):
         self._rects: list[QRectF] = []
         self._columns: list[list[int]] = []
         self._column_bottoms: list[list[float]] = []
-        self._column_target = 220
-        self._column_width = 220.0
-        self._gap = 12
+        self._column_target = 232
+        self._column_width = 232.0
+        self._gap = 18
         self._content_height = 0
         self._memory_cache_limit = max(1024 * 1024, memory_cache_bytes)
         self._memory_cache_bytes = 0
@@ -182,7 +183,12 @@ class WaterfallView(QAbstractScrollArea):
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802 - Qt API name
         painter = QPainter(self.viewport())
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        painter.fillRect(event.rect(), QColor("#faf9f8"))
+        # Soft vertical wash reads calmer than a flat fill and keeps card
+        # shadows from looking muddy.
+        background = QLinearGradient(0, 0, 0, self.viewport().height())
+        background.setColorAt(0.0, QColor("#f7f8fa"))
+        background.setColorAt(1.0, QColor("#eef0f4"))
+        painter.fillRect(event.rect(), background)
 
         scroll_y = self.verticalScrollBar().value()
         visible = QRectF(0, scroll_y, self.viewport().width(), self.viewport().height())
@@ -212,53 +218,79 @@ class WaterfallView(QAbstractScrollArea):
 
         is_hovered = index == self._hover_index
         active = index == self._active_index
-        radius = 9.0
+        radius = 12.0
+        hover_lift = -3.0 if is_hovered and not active else 0.0
+
         card = rect.adjusted(0.5, 0.5, -0.5, -0.5)
+        if hover_lift:
+            card = card.translated(0, hover_lift)
 
         def _rounded(where: QRectF, r: float) -> QPainterPath:
             path = QPainterPath()
             path.addRoundedRect(where, r, r)
             return path
 
-        # Soft drop shadow (two alpha-gradient layers, offset downward).
-        for offset, alpha in ((2, 26), (1, 14)):
+        # Layered soft shadow: wider and softer on hover for a floating feel.
+        shadow_layers = (
+            ((6, 30), (3, 22), (1, 12)) if (is_hovered or active) else ((3, 20), (1, 11))
+        )
+        for offset, alpha in shadow_layers:
             painter.fillPath(
-                _rounded(card.adjusted(0, offset, 0, offset), radius),
-                QColor(0, 0, 0, alpha),
+                _rounded(card.adjusted(0, offset, 0, offset + 1), radius),
+                QColor(15, 23, 42, alpha),
             )
 
-        # Card body.
         card_path = _rounded(card, radius)
         if pixmap is None:
-            painter.fillPath(card_path, QColor("#f0efed"))
-            painter.setPen(QColor("#8a8886"))
+            painter.fillPath(card_path, QColor("#eef1f5"))
+            painter.setPen(QColor("#94a3b8"))
+            font = painter.font()
+            font.setPointSizeF(9.0)
+            font.setBold(True)
+            painter.setFont(font)
             painter.drawText(
-                card, Qt.AlignmentFlag.AlignCenter, item.path.suffix.upper().lstrip(".")
+                card,
+                Qt.AlignmentFlag.AlignCenter,
+                item.path.suffix.upper().lstrip("."),
             )
-            painter.setPen(QPen(QColor(0, 0, 0, 14), 1))
-            painter.drawPath(card_path)
         else:
             self._thumbnails.move_to_end(cache_key)
             painter.save()
             painter.setClipPath(card_path)
             painter.drawPixmap(card, pixmap, QRectF(pixmap.rect()))
+            # Subtle bottom scrim so badges and captions stay legible on
+            # bright thumbnails.
+            if item.is_video:
+                scrim = QLinearGradient(card.left(), card.bottom() - 44, card.left(), card.bottom())
+                scrim.setColorAt(0.0, QColor(0, 0, 0, 0))
+                scrim.setColorAt(1.0, QColor(0, 0, 0, 105))
+                painter.fillPath(card_path, scrim)
             painter.restore()
-            painter.setPen(QPen(QColor(0, 0, 0, 18), 1))
-            painter.drawPath(card_path)
 
-        # Fluent accent outline on hover/active.
+        # Hairline border keeps cards separated on light backgrounds.
+        if not (is_hovered or active):
+            painter.setPen(QPen(QColor(15, 23, 42, 22), 1))
+            painter.drawPath(_rounded(card.adjusted(0.5, 0.5, -0.5, -0.5), radius - 0.5))
+
+        # Accent ring on hover / active.
         if is_hovered or active:
-            accent = QColor("#0067c0")
-            accent.setAlpha(220 if active else 150)
-            painter.setPen(QPen(accent, 2))
-            painter.drawPath(_rounded(rect.adjusted(-1, -1, 1, 1), radius + 1))
+            accent = QColor("#0a84ff" if active else "#0078d4")
+            accent.setAlpha(235 if active else 170)
+            painter.setPen(QPen(accent, 2.0 if active else 1.8))
+            painter.drawPath(_rounded(card.adjusted(-1, -1, 1, 1), radius + 1))
 
         if item.is_video:
             label = format_duration(item.duration_ms) if item.duration_ms else "VIDEO"
-            badge = QRectF(card.right() - 68, card.bottom() - 28, 60, 20)
-            painter.fillPath(_rounded(badge, 6), QColor(0, 0, 0, 170))
+            badge = QRectF(card.right() - 66, card.bottom() - 27, 54, 19)
+            painter.fillPath(_rounded(badge, 5.5), QColor(12, 18, 28, 190))
+            font = painter.font()
+            font.setPointSizeF(8.0)
+            font.setBold(True)
+            painter.setFont(font)
             painter.setPen(QColor("#ffffff"))
             painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, label)
+            font.setBold(False)
+            painter.setFont(font)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt API name
         content_point = event.position() + QPointF(0, self.verticalScrollBar().value())
