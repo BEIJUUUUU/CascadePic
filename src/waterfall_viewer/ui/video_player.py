@@ -256,9 +256,8 @@ class VideoPlayer(QWidget):
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt API name
         # Qt can deliver a final event after the underlying C++ object has been
-        # destroyed (e.g. during interpreter shutdown). Touching `self` then
-        # raises RuntimeError, and reaching super() can crash with an access
-        # violation, so bail out before anything else.
+        # destroyed (e.g. during interpreter shutdown), so validate the wrapper
+        # before touching anything.
         if not shiboken6.isValid(self):
             return False
         try:
@@ -268,10 +267,11 @@ class VideoPlayer(QWidget):
         if is_wheel and watched in (self, getattr(self, "video_surface", None)):
             self._emit_wheel_navigation(event)
             return True
-        try:
-            return super().eventFilter(watched, event)
-        except RuntimeError:
-            return False
+        # QWidget.eventFilter does nothing but return False. Calling it through
+        # zero-argument super() is unsafe here: the shiboken wrapper can outlive
+        # its type during teardown, raising
+        # "super(type, obj): obj must be an instance or subtype of type".
+        return False
 
     def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802 - Qt API name
         self._emit_wheel_navigation(event)
@@ -290,13 +290,13 @@ class VideoPlayer(QWidget):
                     state = self._player.get_state()
                     if state == vlc.State.Error:
                         self._timer.stop()
-                        self.play_button.setText("▶")
+                        self.play_button.setIcon(self._icon_play)
                         self.time_label.setText("播放失败")
                         self.playback_error.emit("VLC 无法播放当前视频")
                         return
                     if state == vlc.State.Ended:
                         self._timer.stop()
-                        self.play_button.setText("▶")
+                        self.play_button.setIcon(self._icon_play)
                         return
                 if self._length_ms <= 0:
                     self._length_ms = max(0, self._player.get_length())
@@ -309,5 +309,5 @@ class VideoPlayer(QWidget):
             self.position_slider.setValue(round(current / duration * 1000))
         self.time_label.setText(f"{format_duration(current)} / {format_duration(duration)}")
         if duration > 0 and current >= duration:
-            self.play_button.setText("▶")
+            self.play_button.setIcon(self._icon_play)
             self._timer.stop()
