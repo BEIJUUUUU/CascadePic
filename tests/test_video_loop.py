@@ -9,6 +9,11 @@ import pytest
 from waterfall_viewer.ui import video_player
 from waterfall_viewer.ui.video_player import VideoPlayer
 
+# Import the state enum through the app's own (optional) vlc module: importing
+# vlc directly would fail on CI runners that have no libvlc.dll.
+_vlc = video_player.vlc
+_VLC_AVAILABLE = _vlc is not None
+
 
 class FakePlayer:
     def __init__(self, state=None) -> None:
@@ -81,12 +86,16 @@ class FakeInstance:
         return path
 
 
-@pytest.fixture(autouse=True)
-def _no_real_vlc(monkeypatch):
-    monkeypatch.setattr(video_player, "vlc", __import__("vlc"))
+@pytest.fixture()
+def _real_vlc_state(monkeypatch):
+    """Point the app's vlc at the real module for tests that need State."""
+    if _VLC_AVAILABLE:
+        monkeypatch.setattr(video_player, "vlc", _vlc)
+    yield
 
 
-def test_loop_restarts_on_end(qtbot) -> None:
+@pytest.mark.skipif(not _VLC_AVAILABLE, reason="libvlc not available on this runner")
+def test_loop_restarts_on_end(qtbot, _real_vlc_state) -> None:
     instance = FakeInstance(video_player.vlc.State.Ended)
     player = VideoPlayer(vlc_instance=instance)
     qtbot.addWidget(player)
@@ -100,7 +109,8 @@ def test_loop_restarts_on_end(qtbot) -> None:
     assert player._timer.isActive()
 
 
-def test_loop_disabled_stops_on_end(qtbot) -> None:
+@pytest.mark.skipif(not _VLC_AVAILABLE, reason="libvlc not available on this runner")
+def test_loop_disabled_stops_on_end(qtbot, _real_vlc_state) -> None:
     instance = FakeInstance(video_player.vlc.State.Ended)
     player = VideoPlayer(vlc_instance=instance)
     qtbot.addWidget(player)
