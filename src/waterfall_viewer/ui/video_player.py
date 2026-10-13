@@ -73,6 +73,7 @@ class VideoPlayer(QWidget):
         self._player = None
         self._seeking = False
         self._length_ms = 0
+        self.loop_enabled = True
         self._stop_state = _StopState()
         self._lock = threading.Lock()
         # A process-wide pool: giving the widget its own QThreadPool ties the
@@ -120,6 +121,17 @@ class VideoPlayer(QWidget):
         self.volume_slider.setValue(80)
         self.volume_slider.setFixedWidth(100)
 
+        self.loop_button = QPushButton()
+        self.loop_button.setObjectName("loopButton")
+        self.loop_button.setCheckable(True)
+        self.loop_button.setChecked(True)
+        self.loop_button.setIcon(
+            QIcon(str(Path(__file__).parent.parent / "resources" / "icons" / "loop.svg"))
+        )
+        self.loop_button.setIconSize(QSize(18, 18))
+        self.loop_button.setToolTip("循环播放（播完自动重头）")
+        self.loop_button.setFixedSize(34, 34)
+
         controls_widget = QWidget()
         controls_widget.setObjectName("videoControls")
         controls = QHBoxLayout(controls_widget)
@@ -128,6 +140,7 @@ class VideoPlayer(QWidget):
         controls.addWidget(self.play_button)
         controls.addWidget(self.position_slider, 1)
         controls.addWidget(self.time_label)
+        controls.addWidget(self.loop_button)
         controls.addWidget(vol_icon_label)
         controls.addWidget(self.volume_slider)
 
@@ -141,11 +154,18 @@ class VideoPlayer(QWidget):
         self._timer.setInterval(500)
         self._timer.timeout.connect(self._update_progress)
         self.play_button.clicked.connect(self.toggle_play)
+        self.loop_button.toggled.connect(self._set_loop)
         self.position_slider.sliderPressed.connect(self._begin_seek)
         self.position_slider.sliderReleased.connect(self._finish_seek)
         self.position_slider.jumped.connect(self._seek_to_value)
         self.volume_slider.valueChanged.connect(self._set_volume)
         self._initialize_backend()
+
+    def _set_loop(self, enabled: bool) -> None:
+        self.loop_enabled = enabled
+        self.loop_button.setToolTip(
+            "循环播放：开（播完自动重头）" if enabled else "循环播放：关（播完停止）"
+        )
 
     @property
     def is_available(self) -> bool:
@@ -325,6 +345,12 @@ class VideoPlayer(QWidget):
                     self.playback_error.emit("VLC 无法播放当前视频")
                     return
                 if state == vlc.State.Ended:
+                    if self.loop_enabled:
+                        # Loop back to the start and keep playing seamlessly.
+                        with suppress(Exception):
+                            self._player.set_time(0)
+                            self._player.play()
+                        return
                     self._timer.stop()
                     self.play_button.setIcon(self._icon_play)
                     return

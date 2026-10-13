@@ -165,21 +165,24 @@ QToolButton#viewerCloseButton:pressed {
     border-color: #c62a2f;
 }
 
+/* Floating viewer arrows: fully transparent at rest so no dark square shows
+ * against the canvas; they fade in on hover. The icon itself carries a white
+ * circular plate drawn via the SVG, keeping the corners pixel-clean. */
 QToolButton#viewerNavButton {
-    background: rgba(255, 255, 255, 232);
-    border: 1px solid rgba(0, 0, 0, 30);
+    background: transparent;
+    border: none;
     border-radius: 23px;
-    padding: 5px;
+    padding: 2px;
 }
 
 QToolButton#viewerNavButton:hover {
-    background: #ffffff;
-    border-color: rgba(10, 108, 255, 0.55);
+    background: rgba(255, 255, 255, 0.16);
+    border: none;
 }
 
 QToolButton#viewerNavButton:pressed {
-    background: rgba(10, 108, 255, 0.20);
-    border-color: #0a6cff;
+    background: rgba(10, 108, 255, 0.28);
+    border: none;
 }
 
 /* --------------------------------------------------------------- buttons */
@@ -223,6 +226,28 @@ QPushButton#playButton:pressed {
 
 QPushButton#playButton:disabled {
     background: #c4ccd6;
+}
+
+QPushButton#loopButton {
+    background: #ffffff;
+    border: 1px solid #d8dde5;
+    border-radius: 17px;
+    padding: 0;
+}
+
+QPushButton#loopButton:hover {
+    border-color: #0a6cff;
+    background: #f4f9ff;
+}
+
+QPushButton#loopButton:checked {
+    background: #eaf2ff;
+    border-color: #0a6cff;
+}
+
+QPushButton#loopButton:disabled {
+    background: #f0f1f3;
+    border-color: #e3e6ea;
 }
 
 /* --------------------------------------------------------------- video */

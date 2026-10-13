@@ -107,7 +107,10 @@ class MainWindow(QMainWindow):
         self._viewer_previous_button = QToolButton(self._pages)
         self._viewer_previous_button.setObjectName("viewerNavButton")
         self._viewer_previous_button.setIcon(self._icon("previous"))
-        self._viewer_previous_button.setIconSize(QSize(24, 24))
+        # The icon SVG carries its own circular plate filling the button, so
+        # render it at full button size — this keeps the circle's corners
+        # transparent instead of showing a dark square behind the plate.
+        self._viewer_previous_button.setIconSize(QSize(44, 44))
         self._viewer_previous_button.setToolTip("上一张  ←")
         self._viewer_previous_button.setFixedSize(46, 46)
         self._viewer_previous_button.clicked.connect(self.show_previous)
@@ -116,7 +119,7 @@ class MainWindow(QMainWindow):
         self._viewer_next_button = QToolButton(self._pages)
         self._viewer_next_button.setObjectName("viewerNavButton")
         self._viewer_next_button.setIcon(self._icon("next"))
-        self._viewer_next_button.setIconSize(QSize(24, 24))
+        self._viewer_next_button.setIconSize(QSize(44, 44))
         self._viewer_next_button.setToolTip("下一张  →")
         self._viewer_next_button.setFixedSize(46, 46)
         self._viewer_next_button.clicked.connect(self.show_next)

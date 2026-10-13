@@ -148,9 +148,18 @@ def install(exe_path: Path | None = None) -> int:
     for base_key, argument in _MENU_LOCATIONS:
         write_verb(base_key, argument)
 
-    # Media files.
+    # Media files. Registered in two layers:
+    #   * SystemFileAssociations\<ext>\shell — always exists, but Explorer can
+    #     collapse these into the extended ("Show more options") area.
+    #   * The file's *current* ProgID under HKCU\Software\Classes — this is the
+    #     same layer Honeyview uses, and it is what puts the entry level with
+    #     "Open" in the menu the user actually sees.
+    progids: set[str] = set()
     for extension in MEDIA_EXTENSIONS:
         write_verb(rf"Software\Classes\SystemFileAssociations\{extension}\shell", "%1")
+        progids.update(_progids_for_extension(winreg, extension))
+    for progid in sorted(progids):
+        write_verb(rf"Software\Classes\{progid}\shell", "%1")
 
     # "Open with" candidate list.
     app_key = _APPLICATION_KEY
@@ -166,6 +175,45 @@ def install(exe_path: Path | None = None) -> int:
 
     _refresh_explorer()
     return created
+
+
+def _progids_for_extension(winreg, extension: str) -> set[str]:
+    """Return the ProgIDs currently associated with ``extension``.
+
+    Covers both the machine default (HKCR\\<ext>) and the per-user choice
+    (FileExts\\<ext>\\UserChoice), since either can own the right-click menu.
+    Only ProgIDs that already exist under HKCU\\Software\\Classes are returned:
+    writing there needs no admin rights, and skipping machine-only ProgIDs
+    keeps the installer from silently failing on half its work.
+    """
+    progids: set[str] = set()
+
+    def add(value) -> None:
+        if isinstance(value, str) and value:
+            progids.add(value)
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, extension) as key:
+            add(winreg.QueryValueEx(key, "")[0])
+    except OSError:
+        pass
+    try:
+        ext_key = (
+            rf"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\{extension}\UserChoice"
+        )
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, ext_key) as key:
+            add(winreg.QueryValueEx(key, "ProgId")[0])
+    except OSError:
+        pass
+
+    writable: set[str] = set()
+    for progid in progids:
+        try:
+            winreg.OpenKey(winreg.HKEY_CURRENT_USER, rf"Software\Classes\{progid}").Close()
+        except OSError:
+            continue
+        writable.add(progid)
+    return writable
 
 
 def uninstall() -> int:
@@ -206,6 +254,14 @@ def uninstall() -> int:
 
     for base in _menu_keys():
         if delete_tree(rf"{base}\{VERB_KEY}"):
+            removed += 1
+
+    # ProgID-layer verbs (same layer install() writes).
+    progids: set[str] = set()
+    for extension in MEDIA_EXTENSIONS:
+        progids.update(_progids_for_extension(winreg, extension))
+    for progid in sorted(progids):
+        if delete_tree(rf"Software\Classes\{progid}\shell\{VERB_KEY}"):
             removed += 1
 
     if delete_tree(_APPLICATION_KEY):
