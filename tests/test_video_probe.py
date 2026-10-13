@@ -3,10 +3,19 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice
 from PySide6.QtGui import QColor, QImage
 
 from waterfall_viewer.services import video_probe
+
+
+@pytest.fixture(autouse=True)
+def _fresh_tool_cache():
+    """Keep tool-lookup caching from leaking between tests."""
+    video_probe.reset_tool_cache()
+    yield
+    video_probe.reset_tool_cache()
 
 
 def test_probe_video_parses_ffprobe_json(monkeypatch, tmp_path: Path) -> None:
@@ -102,6 +111,7 @@ def test_find_tool_prefers_configured_environment(monkeypatch, tmp_path: Path) -
     configured = tmp_path / "ffprobe.exe"
     configured.touch()
     monkeypatch.setenv("WATERFALL_FFPROBE", str(configured))
+    video_probe.reset_tool_cache()
 
     assert video_probe._find_tool("WATERFALL_FFPROBE", "ffprobe.exe") == str(configured)
 
@@ -117,5 +127,6 @@ def test_find_tool_uses_frozen_executable_directory(monkeypatch, tmp_path: Path)
         str(tmp_path / "WaterfallMediaViewer.exe"),
         raising=False,
     )
+    video_probe.reset_tool_cache()
 
     assert video_probe._find_tool("WATERFALL_FFMPEG", "ffmpeg.exe") == str(bundled)

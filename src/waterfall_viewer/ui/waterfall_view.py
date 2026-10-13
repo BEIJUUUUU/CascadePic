@@ -22,6 +22,7 @@ from PySide6.QtWidgets import QAbstractScrollArea
 from waterfall_viewer.models.media_item import MediaItem
 from waterfall_viewer.services.thumbnail_cache import ThumbnailDiskCache
 from waterfall_viewer.utils.formatting import format_duration
+from waterfall_viewer.workers.safe_signals import stop_worker
 from waterfall_viewer.workers.thumbnail_worker import ThumbnailWorker
 
 ThumbnailKey = tuple[str, int]
@@ -168,17 +169,25 @@ class WaterfallView(QAbstractScrollArea):
     def cancel_pending_thumbnails(self) -> None:
         """Cancel queued thumbnail work so nothing reports back after teardown."""
         self._generation += 1
+        self._drop_workers(lambda _key, _worker: True)
+
+    def _drop_workers(self, should_drop) -> None:
+        """Cancel workers and forget the ones successfully removed from the queue.
+
+        ``should_drop(key, worker) -> bool`` selects which entries to drop.
+        Routing every sweep through here keeps the ``tryTake`` guard in one
+        place: calling it on a worker Qt has already auto-deleted raises, which
+        used to abort paintEvent / set_items / resizeEvent / closeEvent.
+        """
         for worker_key, worker in list(self._workers.items()):
-            worker.cancel()
-            if self._thread_pool.tryTake(worker):
+            if not should_drop(worker_key, worker):
+                continue
+            if stop_worker(self._thread_pool, worker):
                 self._workers.pop(worker_key, None)
 
     def _reset_thumbnail_requests(self) -> None:
         self._generation += 1
-        for worker_key, worker in list(self._workers.items()):
-            worker.cancel()
-            if self._thread_pool.tryTake(worker):
-                self._workers.pop(worker_key, None)
+        self._drop_workers(lambda _key, _worker: True)
         self._thumbnails.clear()
         self._thumbnail_sizes.clear()
         self._memory_cache_bytes = 0
@@ -375,13 +384,11 @@ class WaterfallView(QAbstractScrollArea):
         self._thread_pool.start(worker)
 
     def _discard_obsolete_queued_workers(self, desired_paths: set[str]) -> None:
-        for worker_key, worker in list(self._workers.items()):
+        def obsolete(worker_key: tuple[int, str, int], _worker) -> bool:
             generation, path_key, _ = worker_key
-            if generation == self._generation and path_key in desired_paths:
-                continue
-            worker.cancel()
-            if self._thread_pool.tryTake(worker):
-                self._workers.pop(worker_key, None)
+            return not (generation == self._generation and path_key in desired_paths)
+
+        self._drop_workers(obsolete)
 
     def _thumbnail_loaded(
         self,
@@ -444,5 +451,9 @@ class WaterfallView(QAbstractScrollArea):
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802 - Qt API name
         super().resizeEvent(event)
-        self._reset_thumbnail_requests()
+        # Only the decode width may change here: thumbnails rendered at the old
+        # width stay valid until the column width actually moves, so keep them
+        # instead of dropping the whole memory cache on every pixel of a drag.
+        self._drop_workers(lambda _key, _worker: True)
         self._relayout()
+        self.viewport().update()

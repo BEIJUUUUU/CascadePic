@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from contextlib import suppress
 from pathlib import Path
 from threading import Event
 
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
 from waterfall_viewer.services.media_catalog import scan_media_folder
+from waterfall_viewer.workers.safe_signals import safe_emit
 
 
 class FolderScanSignals(QObject):
@@ -28,22 +28,19 @@ class FolderScanWorker(QRunnable):
     def cancel(self) -> None:
         self._cancelled.set()
 
-    @staticmethod
-    def _emit(signal, *args) -> None:
-        with suppress(RuntimeError):
-            signal.emit(*args)
-
     @Slot()
     def run(self) -> None:
         try:
             items = scan_media_folder(self.folder, self._cancelled.is_set)
-        except OSError as error:
+        except Exception as error:  # noqa: BLE001 - must always report back
+            # Catching broadly on purpose: an uncaught error here would emit no
+            # signal at all, leaving the UI stuck on "正在扫描…" with no dialog.
             if self._cancelled.is_set():
-                self._emit(self.signals.cancelled, self.generation)
+                safe_emit(self.signals.cancelled, self.generation)
             else:
-                self._emit(self.signals.failed, self.generation, str(error))
+                safe_emit(self.signals.failed, self.generation, str(error))
             return
         if self._cancelled.is_set():
-            self._emit(self.signals.cancelled, self.generation)
+            safe_emit(self.signals.cancelled, self.generation)
             return
-        self._emit(self.signals.finished, self.generation, items)
+        safe_emit(self.signals.finished, self.generation, items)

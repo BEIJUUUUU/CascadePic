@@ -171,14 +171,35 @@ def _run_process(
 
 
 def _find_tool(environment_name: str, executable_name: str) -> str | None:
+    # Cached: folder scans call this once per video, and shutil.which hits the
+    # filesystem each time. The lookup result cannot change within a session.
+    cache_key = (environment_name, executable_name)
+    cached = _TOOL_CACHE.get(cache_key, _UNSET)
+    if cached is not _UNSET:
+        return cached
     configured = os.environ.get(environment_name)
     if configured and Path(configured).is_file():
-        return configured
-    if getattr(sys, "frozen", False):
+        resolved = configured
+    elif getattr(sys, "frozen", False):
         bundled = Path(sys.executable).parent / executable_name
-        if bundled.is_file():
-            return str(bundled)
-    return shutil.which(executable_name)
+        resolved = str(bundled) if bundled.is_file() else None
+    else:
+        resolved = shutil.which(executable_name)
+    _TOOL_CACHE[cache_key] = resolved
+    return resolved
+
+
+class _Unset:
+    pass
+
+
+_UNSET = _Unset()
+_TOOL_CACHE: dict[tuple[str, str], str | None] = {}
+
+
+def reset_tool_cache() -> None:
+    """Forget cached tool lookups (used by tests that patch the environment)."""
+    _TOOL_CACHE.clear()
 
 
 def _creation_flags() -> int:

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from contextlib import suppress
 from pathlib import Path
 from threading import BoundedSemaphore, Event
 
@@ -10,8 +9,13 @@ from PySide6.QtGui import QImage, QImageReader
 from waterfall_viewer.models.media_item import MediaKind
 from waterfall_viewer.services.thumbnail_cache import ThumbnailDiskCache
 from waterfall_viewer.services.video_probe import extract_video_thumbnail
+from waterfall_viewer.workers.safe_signals import safe_emit
 
+# Video thumbnail extraction shells out to ffmpeg; cap how many run at once.
 _VIDEO_DECODE_LIMIT = BoundedSemaphore(2)
+
+# Longest edge cap for decoded thumbnails, to bound memory on huge sources.
+_MAX_THUMBNAIL_EDGE = 4096
 
 
 class ThumbnailSignals(QObject):
@@ -43,34 +47,35 @@ class ThumbnailWorker(QRunnable):
     def cancel(self) -> None:
         self._cancelled.set()
 
-    @staticmethod
-    def _emit(signal, *args) -> None:
-        with suppress(RuntimeError):
-            signal.emit(*args)
-
     @Slot()
     def run(self) -> None:
         key = str(self.path)
-        cached = self.disk_cache.load(self.path, self.target_width)
-        if self._cancelled.is_set():
-            self._emit(self.signals.cancelled, self.generation, key, self.target_width)
-            return
-        if cached is not None:
-            self._emit(self.signals.loaded, self.generation, key, self.target_width, cached, True)
-            return
+        width = self.target_width
+        try:
+            cached = self.disk_cache.load(self.path, width)
+            if self._cancelled.is_set():
+                safe_emit(self.signals.cancelled, self.generation, key, width)
+                return
+            if cached is not None:
+                safe_emit(self.signals.loaded, self.generation, key, width, cached, True)
+                return
 
-        image = self._decode_video() if self.kind is MediaKind.VIDEO else self._decode_image()
-        if self._cancelled.is_set():
-            self._emit(self.signals.cancelled, self.generation, key, self.target_width)
-            return
-        if image is None or image.isNull():
-            self._emit(self.signals.failed, self.generation, key, self.target_width)
-            return
-        self.disk_cache.store(self.path, self.target_width, image, self._cancelled.is_set)
-        if self._cancelled.is_set():
-            self._emit(self.signals.cancelled, self.generation, key, self.target_width)
-            return
-        self._emit(self.signals.loaded, self.generation, key, self.target_width, image, False)
+            image = self._decode_video() if self.kind is MediaKind.VIDEO else self._decode_image()
+            if self._cancelled.is_set():
+                safe_emit(self.signals.cancelled, self.generation, key, width)
+                return
+            if image is None or image.isNull():
+                safe_emit(self.signals.failed, self.generation, key, width)
+                return
+            self.disk_cache.store(self.path, width, image, self._cancelled.is_set)
+            if self._cancelled.is_set():
+                safe_emit(self.signals.cancelled, self.generation, key, width)
+                return
+            safe_emit(self.signals.loaded, self.generation, key, width, image, False)
+        except Exception:  # noqa: BLE001 - must always report back
+            # Without this the entry lingers in the view's worker map forever,
+            # eventually wedging the pending-thumbnail budget.
+            safe_emit(self.signals.failed, self.generation, key, width)
 
     def _decode_video(self) -> QImage | None:
         with _VIDEO_DECODE_LIMIT:
@@ -86,8 +91,14 @@ class ThumbnailWorker(QRunnable):
         reader = QImageReader(str(self.path))
         reader.setAutoTransform(True)
         size = reader.size()
-        if size.isValid():
-            scale = min(1.0, self.target_width / size.width(), 4096 / size.height())
+        # QSize(0, 100).isValid() is True, so also require positive dimensions
+        # before dividing by them.
+        if size.isValid() and size.width() > 0 and size.height() > 0:
+            scale = min(
+                1.0,
+                self.target_width / size.width(),
+                _MAX_THUMBNAIL_EDGE / size.height(),
+            )
             if scale < 1.0:
                 reader.setScaledSize(
                     QSize(

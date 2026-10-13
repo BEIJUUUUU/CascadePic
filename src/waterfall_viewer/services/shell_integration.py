@@ -94,19 +94,21 @@ def _refresh_explorer() -> None:
         ctypes.windll.shell32.SHChangeNotify(0x08000000, 0x0000, None, None)
     with contextlib.suppress(Exception):
         # WM_SETTINGCHANGE broadcast, picked up by running Explorer windows.
-        HWND_BROADCAST = 0xFFFF
-        WM_SETTINGCHANGE = 0x001A
-        SMTO_ABORTIFHUNG = 0x0002
-        result = ctypes.c_long()
-        ctypes.windll.user32.SendMessageTimeoutW(
-            HWND_BROADCAST,
-            WM_SETTINGCHANGE,
-            0,
-            ctypes.c_wchar_p("Shell"),
-            SMTO_ABORTIFHUNG,
-            2000,
-            ctypes.byref(result),
-        )
+        # Prototypes are declared so ctypes marshals the arguments correctly;
+        # the result pointer is NULL because the reply is not needed (a
+        # DWORD_PTR out-param would need an 8-byte buffer on Win64).
+        send = ctypes.windll.user32.SendMessageTimeoutW
+        send.argtypes = [
+            ctypes.c_void_p,  # hWnd
+            ctypes.c_uint,  # Msg
+            ctypes.c_size_t,  # wParam
+            ctypes.c_wchar_p,  # lParam
+            ctypes.c_uint,  # fuFlags
+            ctypes.c_uint,  # uTimeout
+            ctypes.c_void_p,  # lpdwResult
+        ]
+        send.restype = ctypes.c_ssize_t
+        send(0xFFFF, 0x001A, 0, "Shell", 0x0002, 2000, None)
 
 
 def _menu_keys() -> list[str]:

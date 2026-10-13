@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from contextlib import suppress
 from pathlib import Path
 from threading import Event
 
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 from PySide6.QtGui import QImageReader
+
+from waterfall_viewer.workers.safe_signals import safe_emit
 
 
 class ImageLoadSignals(QObject):
@@ -27,23 +28,23 @@ class ImageLoadWorker(QRunnable):
     def cancel(self) -> None:
         self._cancelled.set()
 
-    @staticmethod
-    def _emit(signal, *args) -> None:
-        with suppress(RuntimeError):
-            signal.emit(*args)
-
     @Slot()
     def run(self) -> None:
         key = str(self.path)
         if self._cancelled.is_set():
-            self._emit(self.signals.cancelled, self.generation, key)
+            safe_emit(self.signals.cancelled, self.generation, key)
             return
-        reader = QImageReader(key)
-        reader.setAutoTransform(True)
-        image = reader.read()
+        try:
+            reader = QImageReader(key)
+            reader.setAutoTransform(True)
+            image = reader.read()
+            error = reader.errorString()
+        except Exception as error:  # noqa: BLE001 - must always report back
+            safe_emit(self.signals.failed, self.generation, key, str(error))
+            return
         if self._cancelled.is_set():
-            self.signals.cancelled.emit(self.generation, key)
+            safe_emit(self.signals.cancelled, self.generation, key)
         elif image.isNull():
-            self._emit(self.signals.failed, self.generation, key, reader.errorString())
+            safe_emit(self.signals.failed, self.generation, key, error)
         else:
-            self._emit(self.signals.loaded, self.generation, key, image)
+            safe_emit(self.signals.loaded, self.generation, key, image)

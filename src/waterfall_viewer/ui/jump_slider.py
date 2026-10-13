@@ -14,8 +14,9 @@ class JumpSlider(QSlider):
         if event.button() is not Qt.MouseButton.LeftButton:
             super().mousePressEvent(event)
             return
+        # setSliderDown already makes QSlider emit sliderPressed; emitting it
+        # here as well made every press fire twice.
         self.setSliderDown(True)
-        self.sliderPressed.emit()
         self._set_value_from_position(event)
         event.accept()
 
@@ -29,8 +30,9 @@ class JumpSlider(QSlider):
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt API name
         if event.button() is Qt.MouseButton.LeftButton and self.isSliderDown():
             self._set_value_from_position(event)
+            # setSliderDown(False) makes QSlider emit sliderReleased; a manual
+            # second emit doubled every release.
             self.setSliderDown(False)
-            self.sliderReleased.emit()
             event.accept()
             return
         super().mouseReleaseEvent(event)

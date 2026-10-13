@@ -21,16 +21,17 @@ except (ImportError, OSError):
 
 
 class _StopState:
-    """Mutable flag shared with a stop job.
+    """Mutable state shared with a stop job.
 
     Kept as its own object so the job never holds a reference back to the
     widget, which would create a reference cycle through the thread pool.
     """
 
-    __slots__ = ("stopping",)
+    __slots__ = ("epoch", "stopping")
 
     def __init__(self) -> None:
         self.stopping = False
+        self.epoch = 0
 
 
 class _StopJob(QRunnable):
@@ -39,18 +40,24 @@ class _StopJob(QRunnable):
     Holds only the player, the lock and a plain state object: the widget may be
     destroyed while this job is still queued, and touching it from a worker
     thread would raise or, worse, crash the interpreter.
+
+    The epoch guard fixes the stop/open race: ``open()`` bumps the epoch, and a
+    stop job captured under an older epoch skips the VLC call entirely instead
+    of stopping the video that was opened after it was queued.
     """
 
-    def __init__(self, player: Any, lock: threading.Lock, state: _StopState) -> None:
+    def __init__(self, player: Any, lock: threading.Lock, state: _StopState, epoch: int) -> None:
         super().__init__()
         self._player = player
         self._lock = lock
         self._state = state
+        self._epoch = epoch
 
     @Slot()
     def run(self) -> None:
         with suppress(Exception), self._lock:
-            self._player.stop()
+            if self._state.epoch == self._epoch:
+                self._player.stop()
         self._state.stopping = False
 
 
@@ -175,12 +182,15 @@ class VideoPlayer(QWidget):
         if self._player is None or self._instance is None:
             return False
         self._reset_controls()
+        # Invalidate any queued stop job so it cannot stop this new video
+        # after we start it (the stale-stop race).
+        self._stop_state.epoch += 1
+        self._stop_state.stopping = False
         try:
-            with self._lock:
-                media = self._instance.media_new(str(path))
-                self._player.set_media(media)
-                self._bind_video_surface()
-                result = self._player.play()
+            media = self._instance.media_new(str(path))
+            self._player.set_media(media)
+            self._bind_video_surface()
+            result = self._player.play()
         except Exception:
             return False
         if result == -1:
@@ -192,14 +202,15 @@ class VideoPlayer(QWidget):
     def toggle_play(self) -> None:
         if self._player is None:
             return
-        with self._lock:
-            if self._player.is_playing():
-                self._player.pause()
-                self.play_button.setIcon(self._icon_play)
-            else:
-                self._player.play()
-                self.play_button.setIcon(self._icon_pause)
-                self._timer.start()
+        # Lock-free for the same reason as _seek_to_value / _set_volume: the
+        # shared lock would block the UI thread behind a background VLC stop.
+        if self._player.is_playing():
+            self._player.pause()
+            self.play_button.setIcon(self._icon_play)
+        else:
+            self._player.play()
+            self.play_button.setIcon(self._icon_pause)
+            self._timer.start()
 
     def _reset_controls(self) -> None:
         self._timer.stop()
@@ -213,7 +224,9 @@ class VideoPlayer(QWidget):
         if self._player is None or self._stop_state.stopping:
             return
         self._stop_state.stopping = True
-        self._pool.start(_StopJob(self._player, self._lock, self._stop_state))
+        self._pool.start(
+            _StopJob(self._player, self._lock, self._stop_state, self._stop_state.epoch)
+        )
 
     def shutdown(self) -> None:
         """Release native resources and detach the event filter before teardown.
@@ -232,6 +245,10 @@ class VideoPlayer(QWidget):
         player = self._player
         self._player = None
         if player is not None:
+            # Bump the epoch so any queued stop job skips its VLC call, then
+            # stop inline: releasing a player that a queued job may still call
+            # is a use-after-release crash.
+            self._stop_state.epoch += 1
             with self._lock, suppress(Exception):
                 player.stop()
             with suppress(Exception):
@@ -258,14 +275,15 @@ class VideoPlayer(QWidget):
     def _seek_to_value(self, value: int) -> None:
         if self._player is None:
             return
-        with self._lock:
-            self._player.set_position(value / 1000)
+        # No Python lock here: libVLC calls are internally thread-safe, and
+        # serialising them against the background stop job would freeze the UI
+        # thread for the whole duration of a blocking VLC stop.
+        self._player.set_position(value / 1000)
 
     def _set_volume(self, value: int) -> None:
         if self._player is None:
             return
-        with self._lock:
-            self._player.audio_set_volume(value)
+        self._player.audio_set_volume(value)
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt API name
         # Qt can deliver a final event after the underlying C++ object has been
@@ -298,23 +316,22 @@ class VideoPlayer(QWidget):
         if self._player is None:
             return
         try:
-            with self._lock:
-                if vlc is not None and hasattr(self._player, "get_state"):
-                    state = self._player.get_state()
-                    if state == vlc.State.Error:
-                        self._timer.stop()
-                        self.play_button.setIcon(self._icon_play)
-                        self.time_label.setText("播放失败")
-                        self.playback_error.emit("VLC 无法播放当前视频")
-                        return
-                    if state == vlc.State.Ended:
-                        self._timer.stop()
-                        self.play_button.setIcon(self._icon_play)
-                        return
-                if self._length_ms <= 0:
-                    self._length_ms = max(0, self._player.get_length())
-                duration = self._length_ms
-                current = max(0, self._player.get_time())
+            if vlc is not None and hasattr(self._player, "get_state"):
+                state = self._player.get_state()
+                if state == vlc.State.Error:
+                    self._timer.stop()
+                    self.play_button.setIcon(self._icon_play)
+                    self.time_label.setText("播放失败")
+                    self.playback_error.emit("VLC 无法播放当前视频")
+                    return
+                if state == vlc.State.Ended:
+                    self._timer.stop()
+                    self.play_button.setIcon(self._icon_play)
+                    return
+            if self._length_ms <= 0:
+                self._length_ms = max(0, self._player.get_length())
+            duration = self._length_ms
+            current = max(0, self._player.get_time())
         except Exception:
             self._timer.stop()
             return

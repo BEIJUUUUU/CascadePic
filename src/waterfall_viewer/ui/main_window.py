@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from contextlib import suppress
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QThreadPool
@@ -42,6 +43,7 @@ from waterfall_viewer.ui.waterfall_view import WaterfallView
 from waterfall_viewer.utils.formatting import format_duration
 from waterfall_viewer.workers.folder_scan_worker import FolderScanWorker
 from waterfall_viewer.workers.image_loader import ImageLoadWorker
+from waterfall_viewer.workers.safe_signals import stop_worker
 
 
 class MainWindow(QMainWindow):
@@ -57,12 +59,13 @@ class MainWindow(QMainWindow):
         self._scan_workers: dict[int, FolderScanWorker] = {}
         self._scan_selections: dict[int, Path | None] = {}
         self._scan_folders: dict[int, Path] = {}
-        # Pools are process-wide on purpose: a QThreadPool owned by the window
-        # is destroyed together with it, and destroying a pool that still has a
-        # running worker crashes inside Qt's thread cleanup. Cancellation plus
-        # the bounded drain in closeEvent keeps shutdown tidy instead.
+        # Thumbnail/scan/VLC work shares the process-wide pool; full-image
+        # decoding gets a dedicated two-thread pool so opening a photo never
+        # queues behind a burst of thumbnail jobs (verified ~2.8 s stall when
+        # everything shared one pool).
         self._thread_pool = QThreadPool.globalInstance()
-        self._image_pool = QThreadPool.globalInstance()
+        self._image_pool = QThreadPool(self)
+        self._image_pool.setMaxThreadCount(2)
         self._image_load_generation = 0
         self._pending_image_path: Path | None = None
         self._image_workers: dict[int, ImageLoadWorker] = {}
@@ -336,6 +339,11 @@ class MainWindow(QMainWindow):
         self._folder_items = items
         self._item_by_path = {item.path: item for item in items}
         self._images = [item.path for item in items]
+        # Drop an in-flight decode only when the file it was decoding is no
+        # longer part of the listing (e.g. the folder changed). Cancelling
+        # unconditionally would discard the decode open_path() just started.
+        if self._pending_image_path is not None and self._pending_image_path not in self._images:
+            self._cancel_image_loads()
         self.waterfall.set_items(items)
         folder_label = folder or (items[0].path.parent if items else "当前文件夹")
 
@@ -354,6 +362,7 @@ class MainWindow(QMainWindow):
 
         self._current_index = -1
         self.video_player.stop()
+        self._stop_movie()
         self._set_current_page(self.waterfall)
         self.setWindowTitle(f"{folder_label} — CascadePic 流瀑看图")
         self._status_label.setText(f"共 {len(items)} 个媒体文件    {folder_label}")
@@ -450,10 +459,9 @@ class MainWindow(QMainWindow):
     def _cancel_image_loads(self) -> None:
         self._image_load_generation += 1
         self._pending_image_path = None
-        for old_generation, old_worker in list(self._image_workers.items()):
-            old_worker.cancel()
-            if self._image_pool.tryTake(old_worker):
-                self._image_workers.pop(old_generation, None)
+        for generation, worker in list(self._image_workers.items()):
+            if stop_worker(self._image_pool, worker):
+                self._image_workers.pop(generation, None)
 
     def _start_movie(self, path: Path) -> bool:
         self._cancel_image_loads()
@@ -462,7 +470,11 @@ class MainWindow(QMainWindow):
         if not movie.isValid():
             self._show_error(f"无法读取 GIF 动图：\n{path}")
             return False
-        movie.setCacheMode(QMovie.CacheMode.CacheAll)
+        # CacheAll retains every decoded frame in RAM with no cap, so long or
+        # large GIFs can exhaust memory outside both LRU budgets. Only cache
+        # when the frame count is modest; otherwise decode on demand.
+        if 0 < movie.frameCount() <= 96:
+            movie.setCacheMode(QMovie.CacheMode.CacheAll)
         movie.frameChanged.connect(lambda frame: self._movie_frame_changed(movie, frame))
         movie.error.connect(lambda error: self._movie_error(movie, error))
         self._movie = movie
@@ -526,6 +538,10 @@ class MainWindow(QMainWindow):
         if generation != self._image_load_generation or path_str != str(self._pending_image_path):
             return
         self._pending_image_path = None
+        # A folder scan may have replaced _images (and reset the index) while
+        # this decode was in flight, so the index is not guaranteed to be valid.
+        if not 0 <= self._current_index < len(self._images):
+            return
         self._cache_full_image(path_str, image)
         self.canvas.set_image(image)
         self._status_label.setText(
@@ -671,15 +687,22 @@ class MainWindow(QMainWindow):
         self._position_viewer_controls()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt API name
-        for worker in self._scan_workers.values():
+        # Each step is isolated: a failure in one must not skip the rest, or
+        # VLC would never be released and filters would stay installed.
+        for worker in list(self._scan_workers.values()):
             worker.cancel()
-        self._cancel_image_loads()
-        self.waterfall.cancel_pending_thumbnails()
-        self._stop_movie()
-        self.video_player.shutdown()
+        with suppress(RuntimeError):
+            self._cancel_image_loads()
+        with suppress(RuntimeError):
+            self.waterfall.cancel_pending_thumbnails()
+        with suppress(RuntimeError):
+            self._stop_movie()
+        with suppress(RuntimeError):
+            self.video_player.shutdown()
         # Let in-flight jobs observe their cancellation before the widgets they
         # report to are destroyed. Bounded so a stuck decode cannot hang exit.
-        QThreadPool.globalInstance().waitForDone(3000)
+        with suppress(RuntimeError):
+            QThreadPool.globalInstance().waitForDone(3000)
         super().closeEvent(event)
 
     def _show_error(self, message: str) -> None:
