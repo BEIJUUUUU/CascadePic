@@ -673,7 +673,7 @@ class MainWindow(QMainWindow):
             worker.cancel()
         self._cancel_image_loads()
         self._stop_movie()
-        self.video_player.stop()
+        self.video_player.shutdown()
         super().closeEvent(event)
 
     def _show_error(self, message: str) -> None:

@@ -2,14 +2,11 @@ from __future__ import annotations
 
 import sys
 import threading
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
-try:
-    import vlc
-except (ImportError, OSError):
-    vlc = None
-
+import shiboken6
 from PySide6.QtCore import QEvent, QRunnable, QSize, Qt, QThreadPool, QTimer, Signal, Slot
 from PySide6.QtGui import QIcon, QWheelEvent
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
@@ -17,24 +14,31 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWi
 from waterfall_viewer.ui.jump_slider import JumpSlider
 from waterfall_viewer.utils.formatting import format_duration
 
+try:
+    import vlc
+except (ImportError, OSError):
+    vlc = None
+
 
 class _StopJob(QRunnable):
     """Call the blocking VLC stop outside the UI thread."""
 
-    def __init__(self, player: Any, owner: VideoPlayer) -> None:
+    def __init__(self, player: Any, lock: threading.Lock, on_done: Any) -> None:
         super().__init__()
         self._player = player
-        self._owner = owner
+        # Hold the lock and the completion callback directly instead of a
+        # reference to the widget: the widget may be destroyed while this job
+        # is still queued, and touching it from a worker thread would raise.
+        self._lock = lock
+        self._on_done = on_done
 
     @Slot()
     def run(self) -> None:
-        try:
-            with self._owner._lock:
-                self._player.stop()
-        except Exception:
-            pass
-        finally:
-            self._owner._stop_job_finished()
+        with suppress(Exception), self._lock:
+            self._player.stop()
+        # The owner widget may be deleted while this job is in flight.
+        with suppress(RuntimeError):
+            self._on_done()
 
 
 class VideoPlayer(QWidget):
@@ -193,10 +197,32 @@ class VideoPlayer(QWidget):
         if self._player is None or self._stopping:
             return
         self._stopping = True
-        self._pool.start(_StopJob(self._player, self))
+        self._pool.start(_StopJob(self._player, self._lock, self._stop_job_finished))
 
     def _stop_job_finished(self) -> None:
         self._stopping = False
+
+    def shutdown(self) -> None:
+        """Release native resources and detach the event filter before teardown.
+
+        Called from the owning window's close handler: leaving the filter
+        installed while the widget is destroyed is what produced a shiboken
+        access violation at interpreter shutdown.
+        """
+        with suppress(RuntimeError):
+            self._timer.stop()
+        with suppress(RuntimeError):
+            self.removeEventFilter(self)
+            surface = getattr(self, "video_surface", None)
+            if surface is not None:
+                surface.removeEventFilter(self)
+        player = self._player
+        self._player = None
+        if player is not None:
+            with self._lock, suppress(Exception):
+                player.stop()
+            with suppress(Exception):
+                player.release()
 
     def _bind_video_surface(self) -> None:
         if self._player is None:
@@ -229,13 +255,23 @@ class VideoPlayer(QWidget):
             self._player.audio_set_volume(value)
 
     def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt API name
-        if event.type() is QEvent.Type.Wheel and watched in (
-            self,
-            self.video_surface,
-        ):
+        # Qt can deliver a final event after the underlying C++ object has been
+        # destroyed (e.g. during interpreter shutdown). Touching `self` then
+        # raises RuntimeError, and reaching super() can crash with an access
+        # violation, so bail out before anything else.
+        if not shiboken6.isValid(self):
+            return False
+        try:
+            is_wheel = event.type() is QEvent.Type.Wheel
+        except RuntimeError:
+            return False
+        if is_wheel and watched in (self, getattr(self, "video_surface", None)):
             self._emit_wheel_navigation(event)
             return True
-        return super().eventFilter(watched, event)
+        try:
+            return super().eventFilter(watched, event)
+        except RuntimeError:
+            return False
 
     def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802 - Qt API name
         self._emit_wheel_navigation(event)
