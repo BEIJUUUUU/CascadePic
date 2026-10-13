@@ -27,6 +27,41 @@ from waterfall_viewer.workers.thumbnail_worker import ThumbnailWorker
 ThumbnailKey = tuple[str, int]
 WorkerKey = tuple[int, str, int]
 
+# --- Card painting constants -------------------------------------------------
+# Kept at module scope so painting allocates no colours, pens or paths per card
+# per frame; only the rounded-rect path is rebuilt (it depends on card size).
+_CARD_RADIUS = 12.0
+_HAIRLINE_PEN = QPen(QColor(15, 23, 42, 26), 1)
+_ACCENT_HOVER_PEN = QPen(QColor(0, 120, 212, 170), 1.8)
+_ACCENT_ACTIVE_PEN = QPen(QColor(10, 132, 255, 235), 2.0)
+_PLACEHOLDER_BG = QColor("#eef1f5")
+_PLACEHOLDER_FG = QColor("#94a3b8")
+_BADGE_BG = QColor(12, 18, 28, 190)
+_BADGE_FG = QColor("#ffffff")
+_SCRIM_TOP = QColor(0, 0, 0, 0)
+_SCRIM_BOTTOM = QColor(0, 0, 0, 105)
+
+
+def _shadow_colors(alphas: tuple[int, ...]) -> tuple[QColor, ...]:
+    """Pre-tint the shadow colour once, since QColor carries the alpha."""
+    colors = []
+    for alpha in alphas:
+        colour = QColor(15, 23, 42)
+        colour.setAlpha(alpha)
+        colors.append(colour)
+    return tuple(colors)
+
+
+# (vertical offset, colour) applied in order: two layers at rest, three on hover.
+_SHADOW_REST = tuple(zip((3, 1), _shadow_colors((20, 11)), strict=True))
+_SHADOW_STRONG = tuple(zip((6, 3, 1), _shadow_colors((30, 22, 12)), strict=True))
+
+
+def _rounded_path(where: QRectF, radius: float) -> QPainterPath:
+    path = QPainterPath()
+    path.addRoundedRect(where, radius, radius)
+    return path
+
 
 class WaterfallView(QAbstractScrollArea):
     """Indexed custom-painted waterfall view with bounded asynchronous decoding."""
@@ -227,76 +262,68 @@ class WaterfallView(QAbstractScrollArea):
 
         is_hovered = index == self._hover_index
         active = index == self._active_index
-        radius = 12.0
+        highlighted = is_hovered or active
         hover_lift = -3.0 if is_hovered and not active else 0.0
 
         card = rect.adjusted(0.5, 0.5, -0.5, -0.5)
         if hover_lift:
             card = card.translated(0, hover_lift)
 
-        def _rounded(where: QRectF, r: float) -> QPainterPath:
-            path = QPainterPath()
-            path.addRoundedRect(where, r, r)
-            return path
+        # One rounded path per card: shadows reuse it via translation, and the
+        # border / accent ring stroke it directly. Building a separate path per
+        # layer cost ~5 allocations per card per frame while scrolling.
+        card_path = _rounded_path(card, _CARD_RADIUS)
 
-        # Layered soft shadow: wider and softer on hover for a floating feel.
-        shadow_layers = (
-            ((6, 30), (3, 22), (1, 12)) if (is_hovered or active) else ((3, 20), (1, 11))
-        )
-        for offset, alpha in shadow_layers:
-            painter.fillPath(
-                _rounded(card.adjusted(0, offset, 0, offset + 1), radius),
-                QColor(15, 23, 42, alpha),
-            )
-
-        card_path = _rounded(card, radius)
+        shadow_layers = _SHADOW_STRONG if highlighted else _SHADOW_REST
+        for offset, color in shadow_layers:
+            painter.save()
+            painter.translate(0, offset)
+            painter.fillPath(card_path, color)
+            painter.restore()
         if pixmap is None:
-            painter.fillPath(card_path, QColor("#eef1f5"))
-            painter.setPen(QColor("#94a3b8"))
+            painter.fillPath(card_path, _PLACEHOLDER_BG)
             font = painter.font()
             font.setPointSizeF(9.0)
             font.setBold(True)
             painter.setFont(font)
+            painter.setPen(_PLACEHOLDER_FG)
             painter.drawText(
                 card,
                 Qt.AlignmentFlag.AlignCenter,
                 item.path.suffix.upper().lstrip("."),
             )
+            font.setBold(False)
+            painter.setFont(font)
         else:
             self._thumbnails.move_to_end(cache_key)
             painter.save()
             painter.setClipPath(card_path)
             painter.drawPixmap(card, pixmap, QRectF(pixmap.rect()))
-            # Subtle bottom scrim so badges and captions stay legible on
-            # bright thumbnails.
+            # Gentle bottom scrim so the duration badge stays legible on bright
+            # thumbnails.
             if item.is_video:
                 scrim = QLinearGradient(card.left(), card.bottom() - 44, card.left(), card.bottom())
-                scrim.setColorAt(0.0, QColor(0, 0, 0, 0))
-                scrim.setColorAt(1.0, QColor(0, 0, 0, 105))
+                scrim.setColorAt(0.0, _SCRIM_TOP)
+                scrim.setColorAt(1.0, _SCRIM_BOTTOM)
                 painter.fillPath(card_path, scrim)
             painter.restore()
 
-        # Hairline border keeps cards separated on light backgrounds.
-        if not (is_hovered or active):
-            painter.setPen(QPen(QColor(15, 23, 42, 22), 1))
-            painter.drawPath(_rounded(card.adjusted(0.5, 0.5, -0.5, -0.5), radius - 0.5))
-
-        # Accent ring on hover / active.
-        if is_hovered or active:
-            accent = QColor("#0a84ff" if active else "#0078d4")
-            accent.setAlpha(235 if active else 170)
-            painter.setPen(QPen(accent, 2.0 if active else 1.8))
-            painter.drawPath(_rounded(card.adjusted(-1, -1, 1, 1), radius + 1))
+        if highlighted:
+            painter.setPen(_ACCENT_ACTIVE_PEN if active else _ACCENT_HOVER_PEN)
+            painter.drawPath(card_path)
+        else:
+            painter.setPen(_HAIRLINE_PEN)
+            painter.drawPath(card_path)
 
         if item.is_video:
             label = format_duration(item.duration_ms) if item.duration_ms else "VIDEO"
             badge = QRectF(card.right() - 66, card.bottom() - 27, 54, 19)
-            painter.fillPath(_rounded(badge, 5.5), QColor(12, 18, 28, 190))
+            painter.fillPath(_rounded_path(badge, 5.5), _BADGE_BG)
             font = painter.font()
             font.setPointSizeF(8.0)
             font.setBold(True)
             painter.setFont(font)
-            painter.setPen(QColor("#ffffff"))
+            painter.setPen(_BADGE_FG)
             painter.drawText(badge, Qt.AlignmentFlag.AlignCenter, label)
             font.setBold(False)
             painter.setFont(font)
