@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QSlider,
     QStackedWidget,
     QToolBar,
-    QToolButton,
     QWidget,
 )
 
@@ -37,6 +36,7 @@ from waterfall_viewer.services.shell_integration import (
 from waterfall_viewer.services.shell_integration import (
     uninstall as uninstall_context_menu,
 )
+from waterfall_viewer.ui.floating_buttons import FloatingCloseButton, FloatingNavButton
 from waterfall_viewer.ui.image_canvas import ImageCanvas
 from waterfall_viewer.ui.video_player import VideoPlayer
 from waterfall_viewer.ui.waterfall_view import WaterfallView
@@ -95,33 +95,15 @@ class MainWindow(QMainWindow):
         self._pages.addWidget(self.video_player)
         self.setCentralWidget(self._pages)
 
-        self._viewer_close_button = QToolButton(self._pages)
-        self._viewer_close_button.setObjectName("viewerCloseButton")
-        self._viewer_close_button.setIcon(self._icon("close"))
-        self._viewer_close_button.setIconSize(QSize(18, 18))
-        self._viewer_close_button.setToolTip("返回瀑布流 (Esc)")
-        self._viewer_close_button.setFixedSize(38, 38)
+        self._viewer_close_button = FloatingCloseButton(self._pages)
         self._viewer_close_button.clicked.connect(self.show_waterfall)
         self._viewer_close_button.hide()
 
-        self._viewer_previous_button = QToolButton(self._pages)
-        self._viewer_previous_button.setObjectName("viewerNavButton")
-        self._viewer_previous_button.setIcon(self._icon("previous"))
-        # The icon SVG carries its own circular plate filling the button, so
-        # render it at full button size — this keeps the circle's corners
-        # transparent instead of showing a dark square behind the plate.
-        self._viewer_previous_button.setIconSize(QSize(44, 44))
-        self._viewer_previous_button.setToolTip("上一张  ←")
-        self._viewer_previous_button.setFixedSize(46, 46)
+        self._viewer_previous_button = FloatingNavButton(is_next=False, parent=self._pages)
         self._viewer_previous_button.clicked.connect(self.show_previous)
         self._viewer_previous_button.hide()
 
-        self._viewer_next_button = QToolButton(self._pages)
-        self._viewer_next_button.setObjectName("viewerNavButton")
-        self._viewer_next_button.setIcon(self._icon("next"))
-        self._viewer_next_button.setIconSize(QSize(44, 44))
-        self._viewer_next_button.setToolTip("下一张  →")
-        self._viewer_next_button.setFixedSize(46, 46)
+        self._viewer_next_button = FloatingNavButton(is_next=True, parent=self._pages)
         self._viewer_next_button.clicked.connect(self.show_next)
         self._viewer_next_button.hide()
 

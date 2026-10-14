@@ -148,43 +148,6 @@ QSlider::handle:horizontal:hover {
 
 /* --------------------------------------------------------------- overlay controls */
 
-QToolButton#viewerCloseButton {
-    background: rgba(255, 255, 255, 240);
-    border: 1px solid rgba(0, 0, 0, 32);
-    border-radius: 19px;
-    padding: 6px;
-}
-
-QToolButton#viewerCloseButton:hover {
-    background: #e5484d;
-    border-color: #e5484d;
-}
-
-QToolButton#viewerCloseButton:pressed {
-    background: #c62a2f;
-    border-color: #c62a2f;
-}
-
-/* Floating viewer arrows: fully transparent at rest so no dark square shows
- * against the canvas; they fade in on hover. The icon itself carries a white
- * circular plate drawn via the SVG, keeping the corners pixel-clean. */
-QToolButton#viewerNavButton {
-    background: transparent;
-    border: none;
-    border-radius: 23px;
-    padding: 2px;
-}
-
-QToolButton#viewerNavButton:hover {
-    background: rgba(255, 255, 255, 0.16);
-    border: none;
-}
-
-QToolButton#viewerNavButton:pressed {
-    background: rgba(10, 108, 255, 0.28);
-    border: none;
-}
-
 /* --------------------------------------------------------------- buttons */
 
 QPushButton {
