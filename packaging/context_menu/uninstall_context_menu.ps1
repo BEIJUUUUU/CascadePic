@@ -9,8 +9,9 @@ param()
 
 $ErrorActionPreference = "Stop"
 
-$VerbKey = "CascadePic"
-$AppKey  = "HKCU:\Software\Classes\Applications\CascadePic.exe"
+$VerbKey          = "CascadePic"
+$FolderVerbKey    = "CascadePicFolder"
+$AppKey           = "HKCU:\Software\Classes\Applications\CascadePic.exe"
 
 $MediaExtensions = @(
     ".jpg", ".jpeg", ".jfif", ".png", ".bmp", ".gif", ".webp", ".tif", ".tiff", ".ico",
@@ -18,9 +19,9 @@ $MediaExtensions = @(
 )
 
 function Remove-MenuVerb {
-    param([Parameter(Mandatory = $true)][string]$BaseKey)
+    param([Parameter(Mandatory = $true)][string]$BaseKey, [string]$KeyName = $VerbKey)
 
-    $key = Join-Path $BaseKey $VerbKey
+    $key = Join-Path $BaseKey $KeyName
     if (Test-Path -LiteralPath $key) {
         Remove-Item -LiteralPath $key -Recurse -Force
         return $true
@@ -29,13 +30,39 @@ function Remove-MenuVerb {
 }
 
 $removed = 0
-if (Remove-MenuVerb -BaseKey "HKCU:\Software\Classes\Directory\shell") { $removed++ }
-if (Remove-MenuVerb -BaseKey "HKCU:\Software\Classes\Directory\Background\shell") { $removed++ }
-if (Remove-MenuVerb -BaseKey "HKCU:\Software\Classes\DesktopBackground\shell") { $removed++ }
-if (Remove-MenuVerb -BaseKey "HKCU:\Software\Classes\Drive\shell") { $removed++ }
+foreach ($base in @(
+    "HKCU:\Software\Classes\Directory\shell",
+    "HKCU:\Software\Classes\Directory\Background\shell",
+    "HKCU:\Software\Classes\DesktopBackground\shell",
+    "HKCU:\Software\Classes\LibraryFolder\Background\shell",
+    "HKCU:\Software\Classes\Drive\shell"
+)) {
+    if (Remove-MenuVerb -BaseKey $base -KeyName $FolderVerbKey) { $removed++ }
+    if (Remove-MenuVerb -BaseKey $base -KeyName $VerbKey) { $removed++ }
+}
 
 foreach ($extension in $MediaExtensions) {
-    if (Remove-MenuVerb -BaseKey "HKCU:\Software\Classes\SystemFileAssociations\$extension\shell") {
+    if (Remove-MenuVerb -BaseKey "HKCU:\Software\Classes\SystemFileAssociations\$extension\shell" -KeyName $VerbKey) {
+        $removed++
+    }
+    if (Remove-MenuVerb -BaseKey "HKCU:\Software\Classes\SystemFileAssociations\$extension\shell" -KeyName $FolderVerbKey) {
+        $removed++
+    }
+}
+
+# 移除 ProgID 下的 Verb
+$progids = @{}
+foreach ($extension in $MediaExtensions) {
+    $uc = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\$extension\UserChoice" -ErrorAction SilentlyContinue
+    if ($uc -and $uc.ProgId) {
+        $progids[$uc.ProgId] = $true
+    }
+}
+foreach ($progid in $progids.Keys) {
+    if (Remove-MenuVerb -BaseKey "HKCU:\Software\Classes\$progid\shell" -KeyName $VerbKey) {
+        $removed++
+    }
+    if (Remove-MenuVerb -BaseKey "HKCU:\Software\Classes\$progid\shell" -KeyName $FolderVerbKey) {
         $removed++
     }
 }
@@ -45,33 +72,13 @@ if (Test-Path -LiteralPath $AppKey) {
     $removed++
 }
 
-# 只清理我们可能创建、且现在确实为空的键（避免误删其他软件的数据）
-foreach ($baseKey in @(
-    "HKCU:\Software\Classes\Directory\Background\shell",
-    "HKCU:\Software\Classes\Directory\Background",
-    "HKCU:\Software\Classes\Directory\shell",
-    "HKCU:\Software\Classes\DesktopBackground\shell",
-    "HKCU:\Software\Classes\DesktopBackground",
-    "HKCU:\Software\Classes\Applications"
-)) {
-    if (Test-Path -LiteralPath $baseKey) {
-        $children = Get-ChildItem -LiteralPath $baseKey -ErrorAction SilentlyContinue
-        $values = (Get-Item -LiteralPath $baseKey).Property
-        if (-not $children -and $values.Count -eq 0) {
-            Remove-Item -LiteralPath $baseKey -Force -ErrorAction SilentlyContinue
-        }
-    }
-}
-
 try {
     Add-Type -Namespace CascadePic -Name Shell -MemberDefinition @'
 [DllImport("shell32.dll", CharSet = CharSet.Auto)]
 public static extern void SHChangeNotify(int wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
 '@ -ErrorAction Stop
     [CascadePic.Shell]::SHChangeNotify(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero)
-} catch {
-    # 忽略
-}
+} catch {}
 
 Write-Host ""
 Write-Host ("右键菜单已卸载，共清理 {0} 处注册项。" -f $removed) -ForegroundColor Green

@@ -47,6 +47,8 @@ _MENU_LOCATIONS = (
     (r"Software\Classes\Directory\Background\shell", "%V", FOLDER_VERB_KEY, FOLDER_VERB_LABEL),
     # Right-click on empty space on the desktop.
     (r"Software\Classes\DesktopBackground\shell", "%V", FOLDER_VERB_KEY, FOLDER_VERB_LABEL),
+    # Right-click on empty space inside a library folder (Pictures, Videos, etc.).
+    (r"Software\Classes\LibraryFolder\Background\shell", "%V", FOLDER_VERB_KEY, FOLDER_VERB_LABEL),
     # Right-click on a drive letter in "This PC".
     (r"Software\Classes\Drive\shell", "%1", FOLDER_VERB_KEY, FOLDER_VERB_LABEL),
 )
@@ -142,14 +144,21 @@ def install(exe_path: Path | None = None) -> int:
     created = 0
 
     def write_verb(
-        base_key: str, argument: str, verb_key: str = VERB_KEY, label: str = VERB_LABEL
+        base_key: str,
+        argument: str,
+        verb_key: str = VERB_KEY,
+        label: str = VERB_LABEL,
+        is_file: bool = False,
     ) -> None:
         nonlocal created
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, rf"{base_key}\{verb_key}") as key:
             winreg.SetValueEx(key, "", 0, winreg.REG_SZ, label)
             winreg.SetValueEx(key, "Icon", 0, winreg.REG_SZ, f"{exe_text},0")
-            # Multi-select opens a single window instead of one per file.
-            winreg.SetValueEx(key, "MultiSelectModel", 0, winreg.REG_SZ, "Single")
+            # Multi-select model applies ONLY to individual files. Setting it on
+            # folder/background keys causes Explorer to hide the verb completely
+            # whenever 0 items are selected (which is ALWAYS on empty space).
+            if is_file:
+                winreg.SetValueEx(key, "MultiSelectModel", 0, winreg.REG_SZ, "Single")
         with winreg.CreateKey(
             winreg.HKEY_CURRENT_USER, rf"{base_key}\{verb_key}\command"
         ) as command:
@@ -159,7 +168,7 @@ def install(exe_path: Path | None = None) -> int:
     # Folders, folder background, desktop background and drives: each entry
     # names the folder action explicitly so it reads as "browse this folder".
     for base_key, argument, verb_key, label in _MENU_LOCATIONS:
-        write_verb(base_key, argument, verb_key, label)
+        write_verb(base_key, argument, verb_key, label, is_file=False)
 
     # Media files. Registered in two layers:
     #   * SystemFileAssociations\<ext>\shell — always exists, but Explorer can
@@ -169,10 +178,14 @@ def install(exe_path: Path | None = None) -> int:
     #     "Open" in the menu the user actually sees.
     progids: set[str] = set()
     for extension in MEDIA_EXTENSIONS:
-        write_verb(rf"Software\Classes\SystemFileAssociations\{extension}\shell", "%1")
+        write_verb(
+            rf"Software\Classes\SystemFileAssociations\{extension}\shell",
+            "%1",
+            is_file=True,
+        )
         progids.update(_progids_for_extension(winreg, extension))
     for progid in sorted(progids):
-        write_verb(rf"Software\Classes\{progid}\shell", "%1")
+        write_verb(rf"Software\Classes\{progid}\shell", "%1", is_file=True)
 
     # "Open with" candidate list.
     app_key = _APPLICATION_KEY
