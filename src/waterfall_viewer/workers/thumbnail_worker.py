@@ -34,6 +34,7 @@ class ThumbnailWorker(QRunnable):
         generation: int,
         disk_cache: ThumbnailDiskCache,
         kind: MediaKind = MediaKind.IMAGE,
+        duration_ms: int = 0,
     ) -> None:
         super().__init__()
         self.path = path
@@ -41,6 +42,7 @@ class ThumbnailWorker(QRunnable):
         self.generation = generation
         self.disk_cache = disk_cache
         self.kind = kind
+        self.duration_ms = max(0, duration_ms)
         self.signals = ThumbnailSignals()
         self._cancelled = Event()
 
@@ -84,6 +86,7 @@ class ThumbnailWorker(QRunnable):
             return extract_video_thumbnail(
                 self.path,
                 self.target_width,
+                duration_ms=self.duration_ms,
                 should_cancel=self._cancelled.is_set,
             )
 

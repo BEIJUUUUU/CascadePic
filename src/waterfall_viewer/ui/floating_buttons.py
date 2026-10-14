@@ -20,6 +20,11 @@ class FloatingNavButton(QAbstractButton):
         self._is_next = is_next
         self.setFixedSize(48, 48)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setWindowFlags(
+            Qt.WindowType.ToolTip
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowDoesNotAcceptFocus
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setToolTip("下一张  →" if is_next else "上一张  ←")
 
@@ -75,6 +80,11 @@ class FloatingCloseButton(QAbstractButton):
         super().__init__(parent)
         self.setFixedSize(40, 40)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setWindowFlags(
+            Qt.WindowType.ToolTip
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowDoesNotAcceptFocus
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setToolTip("返回瀑布流 (Esc)")
 

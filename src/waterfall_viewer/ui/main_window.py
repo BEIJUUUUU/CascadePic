@@ -4,8 +4,17 @@ from collections import OrderedDict
 from contextlib import suppress
 from pathlib import Path
 
-from PySide6.QtCore import QSize, Qt, QThreadPool
-from PySide6.QtGui import QAction, QCloseEvent, QIcon, QImage, QKeySequence, QMovie, QResizeEvent
+from PySide6.QtCore import QPoint, QSize, Qt, QThreadPool
+from PySide6.QtGui import (
+    QAction,
+    QCloseEvent,
+    QIcon,
+    QImage,
+    QKeySequence,
+    QMoveEvent,
+    QMovie,
+    QResizeEvent,
+)
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
@@ -95,15 +104,15 @@ class MainWindow(QMainWindow):
         self._pages.addWidget(self.video_player)
         self.setCentralWidget(self._pages)
 
-        self._viewer_close_button = FloatingCloseButton(self._pages)
+        self._viewer_close_button = FloatingCloseButton(self)
         self._viewer_close_button.clicked.connect(self.show_waterfall)
         self._viewer_close_button.hide()
 
-        self._viewer_previous_button = FloatingNavButton(is_next=False, parent=self._pages)
+        self._viewer_previous_button = FloatingNavButton(is_next=False, parent=self)
         self._viewer_previous_button.clicked.connect(self.show_previous)
         self._viewer_previous_button.hide()
 
-        self._viewer_next_button = FloatingNavButton(is_next=True, parent=self._pages)
+        self._viewer_next_button = FloatingNavButton(is_next=True, parent=self)
         self._viewer_next_button.clicked.connect(self.show_next)
         self._viewer_next_button.hide()
 
@@ -607,15 +616,18 @@ class MainWindow(QMainWindow):
     def _position_viewer_controls(self) -> None:
         if not hasattr(self, "_viewer_close_button"):
             return
+        origin = self._pages.mapToGlobal(QPoint(0, 0))
         margin = 14
         self._viewer_close_button.move(
-            self._pages.width() - self._viewer_close_button.width() - margin,
-            margin,
+            origin.x() + self._pages.width() - self._viewer_close_button.width() - margin,
+            origin.y() + margin,
         )
-        middle_y = max(12, (self._pages.height() - self._viewer_previous_button.height()) // 2)
-        self._viewer_previous_button.move(16, middle_y)
+        middle_y = origin.y() + max(
+            12, (self._pages.height() - self._viewer_previous_button.height()) // 2
+        )
+        self._viewer_previous_button.move(origin.x() + 16, middle_y)
         self._viewer_next_button.move(
-            self._pages.width() - self._viewer_next_button.width() - 16,
+            origin.x() + self._pages.width() - self._viewer_next_button.width() - 16,
             middle_y,
         )
         self._viewer_previous_button.raise_()
@@ -667,6 +679,21 @@ class MainWindow(QMainWindow):
         else:
             self.showFullScreen()
 
+    def moveEvent(self, event: QMoveEvent) -> None:  # noqa: N802 - Qt API name
+        super().moveEvent(event)
+        self._position_viewer_controls()
+
+    def changeEvent(self, event) -> None:  # noqa: N802 - Qt API name
+        super().changeEvent(event)
+        if hasattr(self, "_viewer_close_button"):
+            if self.isMinimized() or not self.isVisible():
+                self._viewer_close_button.hide()
+                self._viewer_previous_button.hide()
+                self._viewer_next_button.hide()
+            else:
+                self._update_viewer_controls()
+                self._position_viewer_controls()
+
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802 - Qt API name
         super().resizeEvent(event)
         self._position_viewer_controls()
@@ -684,6 +711,10 @@ class MainWindow(QMainWindow):
             self._stop_movie()
         with suppress(RuntimeError):
             self.video_player.shutdown()
+        with suppress(RuntimeError):
+            self._viewer_close_button.close()
+            self._viewer_previous_button.close()
+            self._viewer_next_button.close()
         # Let in-flight jobs observe their cancellation before the widgets they
         # report to are destroyed. Bounded so a stuck decode cannot hang exit.
         with suppress(RuntimeError):

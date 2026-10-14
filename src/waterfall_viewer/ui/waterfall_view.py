@@ -376,6 +376,7 @@ class WaterfallView(QAbstractScrollArea):
             self._generation,
             self._disk_cache,
             item.kind,
+            duration_ms=item.duration_ms or 0,
         )
         worker.signals.loaded.connect(self._thumbnail_loaded)
         worker.signals.failed.connect(self._thumbnail_failed)

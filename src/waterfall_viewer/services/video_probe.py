@@ -107,34 +107,64 @@ def probe_video(
 def extract_video_thumbnail(
     path: Path,
     target_width: int,
+    duration_ms: int = 0,
     executable: str | None = None,
     should_cancel: Callable[[], bool] | None = None,
 ) -> QImage | None:
     executable = executable or find_ffmpeg()
     if executable is None:
         return None
+
+    # Pick a representative frame past opening black frames and studio logos:
+    # If duration is known:
+    #   - For long videos (>= 60s): seek to ~5-10 seconds
+    #   - For medium videos (>= 10s): seek to ~2-3 seconds
+    #   - For short clips (< 10s): seek to ~10-15% or 0.5s
+    # If duration is unknown, default to 2.0s.
+    seek_s = 2.0
+    if duration_ms > 0:
+        duration_s = duration_ms / 1000.0
+        if duration_s >= 60.0:
+            seek_s = min(10.0, max(3.0, duration_s * 0.08))
+        elif duration_s >= 10.0:
+            seek_s = min(3.0, max(1.5, duration_s * 0.15))
+        elif duration_s >= 2.0:
+            seek_s = 1.0
+        else:
+            seek_s = 0.0
+
     scale_filter = f"scale={max(64, target_width)}:4096:force_original_aspect_ratio=decrease"
-    command = [
-        executable,
-        "-v",
-        "error",
-        "-i",
-        str(path),
-        "-frames:v",
-        "1",
-        "-vf",
-        scale_filter,
-        "-f",
-        "image2pipe",
-        "-vcodec",
-        "png",
-        "pipe:1",
-    ]
-    result = _run_process(command, timeout=30, should_cancel=should_cancel)
-    if result is None or result.returncode != 0 or not result.stdout:
-        return None
-    image = QImage.fromData(result.stdout, "PNG")
-    return None if image.isNull() else image
+
+    def _run_extract(seek_time: float) -> QImage | None:
+        command = [executable, "-v", "error"]
+        if seek_time > 0:
+            command.extend(["-ss", f"{seek_time:.2f}"])
+        command.extend(
+            [
+                "-i",
+                str(path),
+                "-frames:v",
+                "1",
+                "-vf",
+                scale_filter,
+                "-f",
+                "image2pipe",
+                "-vcodec",
+                "png",
+                "pipe:1",
+            ]
+        )
+        result = _run_process(command, timeout=30, should_cancel=should_cancel)
+        if result is None or result.returncode != 0 or not result.stdout:
+            return None
+        image = QImage.fromData(result.stdout, "PNG")
+        return None if image.isNull() else image
+
+    img = _run_extract(seek_s)
+    if img is None and seek_s > 0:
+        # Fallback to frame 0 if seeking produced no output
+        img = _run_extract(0.0)
+    return img
 
 
 def _run_process(
